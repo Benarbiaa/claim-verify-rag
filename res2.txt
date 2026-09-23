@@ -1,7 +1,0 @@
-Based on the provided passages, semantic chunking does not consistently improve retrieval performance compared to fixed-size chunking [Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, chunk #4]. 
-
-Specifically:
-- The computational costs associated with semantic chunking are not justified by consistent performance gains, as its advantages are highly task-dependent and often minimal [Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, chunk #1, chunk #4].
-- Semantic chunking showed some performance benefits only in specific scenarios, such as artificially noisy, stitched datasets with high topic diversity (where the Breakpoint-based Semantic Chunker outperformed others by preserving topic integrity) [Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #1, chunk #4]. 
-- However, on non-synthetic datasets that better reflect real-world documents, fixed-size chunking often performed better, and fixed-size chunking even performed best on 3 out of 5 datasets in evidence retrieval [Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4, chunk #5]. 
-- Overall, fixed-size chunking remains a more efficient and reliable choice for practical RAG applications [Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #5].
