@@ -1,0 +1,137 @@
+[
+  {
+    "claim_id": "c1",
+    "claim": "Les coûts de calcul associés au découpage sémantique ne sont pas justifiés par des gains de performance cohérents par rapport au découpage de taille fixe.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0",
+    "verdict": "supported",
+    "justification": "Les sources indiquent que le découpage sémantique (Semantic Chunking) présente des performances de récupération et de génération très proches, voire inférieures, à des méthodes plus simples comme le découpage de taille fixe ou récursif, tout en nécessitant des temps de calcul ou des coûts importants. Par exemple, le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' montre que les différences de performance (comme la similarité cosinus ou les scores F1) entre le découpage de taille fixe et les méthodes sémantiques sont minimales ou que les méthodes simples surpassent les approches sémantiques. De plus, 'LumberChunker: Long-Form Narrative Document Segmentation.pdf' indique que le découpage sémantique échoue à monter en charge efficacement et nécessite un temps de calcul élevé (ex: 4978 secondes pour un livre) sans garantir des gains cohérents.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf",
+      "LumberChunker: Long-Form Narrative Document Segmentation.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c2",
+    "claim": "Les avantages du découpage sémantique sont fortement dépendants du contexte.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #1",
+    "verdict": "contradicted",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (notamment le chunk #1) contredit l'affirmation en concluant que les avantages du découpage sémantique sont « highly task-dependent » (fortement dépendants de la tâche) et non pas « fortement dépendants du contexte ». De plus, les sources ne soutiennent pas l'idée d'une dépendance contextuelle au sens du claim initial, mais plutôt d'une dépendance aux tâches évaluées et aux coûts computationnels.",
+    "supporting_sources": [],
+    "contradicting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ]
+  },
+  {
+    "claim_id": "c3",
+    "claim": "Les avantages du découpage sémantique sont souvent insuffisants pour justifier les coûts de calcul supplémentaires.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #1",
+    "verdict": "unverifiable",
+    "justification": "Aucune des sources fournies ne discute du fait de savoir si les avantages du découpage sémantique (semantic chunking) sont insuffisants ou non pour justifier les coûts de calcul supplémentaires.",
+    "supporting_sources": [],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c4",
+    "claim": "Sur des jeux de données non synthétiques qui reflètent mieux les documents du monde réel, le découpage sémantique n'a pas d'avantage marqué.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4, chunk #5",
+    "verdict": "supported",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (chunk #5) indique explicitement que sur des jeux de données non synthétiques reflétant mieux les documents du monde réel ('On non-synthetic datasets that better reflect real-world documents'), le découpage de taille fixe ('fixed-size chunking') performait souvent mieux, et que le découpage sémantique ne justifiait pas le coût computationnel supplémentaire car les gains de performance n'étaient pas constants.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c5",
+    "claim": "Sur des jeux de données non synthétiques, le découpage de taille fixe a souvent de meilleures performances.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4, chunk #5",
+    "verdict": "unverifiable",
+    "justification": "Aucune des sources fournies ne discute des performances du découpage de taille fixe sur des jeux de données non synthétiques.",
+    "supporting_sources": [],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c6",
+    "claim": "Le découpage sémantique a pu montrer certains bénéfices, notamment le Breakpoint-based Semantic Chunker, sur des données synthétiques caractérisées par une forte diversité de sujets.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "supported",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (notamment les chunks #1, #4 et #0) indique explicitement que le 'Breakpoint-based Semantic Chunker' a montré des avantages et des performances supérieures en préservant l'intégrité des sujets sur des données synthétiques/artificiellement bruitées caractérisées par une forte diversité de sujets ('topic diversity').",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c7",
+    "claim": "L'avantage du découpage sémantique diminue à mesure que la longueur des documents augmente.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "unverifiable",
+    "justification": "Aucune des sources fournies ne discute de l'évolution de l'avantage du découpage sémantique en fonction de la longueur des documents.",
+    "supporting_sources": [],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c8",
+    "claim": "L'avantage du découpage sémantique diminue avec des documents réels moins diversifiés.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "supported",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (notamment le chunk #4) indique explicitement que lorsque la diversité des sujets diminue (par exemple dans des documents réels ou lorsque les documents sont plus longs et moins de documents sont cousus ensemble), l'avantage du découpage sémantique (breakpoint-based semantic chunker) diminue et l'écart avec le découpage de taille fixe se réduit.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c9",
+    "claim": "Les différences de performance pour la récupération d'éléments de preuve entre le découpage de taille fixe et les deux types de découpage sémantique étaient minimes.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "unverifiable",
+    "justification": "Aucune des sources fournies ne discute des différences de performance pour la récupération d'éléments de preuve entre le découpage de taille fixe et les deux types de découpage sémantique.",
+    "supporting_sources": [],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c10",
+    "claim": "Le découpage de taille fixe a obtenu de meilleurs résultats sur 3 des 5 jeux de données évalués pour la récupération d'éléments de preuve.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "unverifiable",
+    "justification": "Aucune des sources fournies ne mentionne l'évaluation d'un découpage de taille fixe sur 5 jeux de données pour la récupération d'éléments de preuve avec de tels résultats spécifiques. Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' évalue plusieurs jeux de données (comme ExpertQA, DelucionQA, TechQA, ConditionalQA, Qasper) mais discute principalement des scores F1 et de la similarité cosinus sans faire référence à une telle statistique sur 3 des 5 jeux de données.",
+    "supporting_sources": [],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c11",
+    "claim": "Les scores de génération de réponses évalués via BERTScore montrent des performances légèrement meilleures pour les découpages sémantiques.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "contradicted",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (section E.1) indique explicitement que les différences entre les chunkers sémantiques et le chunker de taille fixe (Fixed-size Chunker) en termes de similarité cosinus (ou de scores de génération) sont minimes, ce qui ne permet pas de tirer de conclusions définitives (contrairement à l'affirmation selon laquelle les performances seraient légèrement meilleures).",
+    "supporting_sources": [],
+    "contradicting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ]
+  },
+  {
+    "claim_id": "c12",
+    "claim": "Les différences de scores de génération de réponses restent minimes, ce qui ne permet pas de tirer de conclusions définitives.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "supported",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (chunk #11) indique explicitement que pour la génération de réponses, les différences de scores (comme la similarité cosinus QA) entre le 'Fixed-size Chunker' et les 'semantic chunkers' restent minimes ('However, the differences are minimal'), ce qui rend difficile de tirer des conclusions définitives ('making it difficult to draw any definitive conclusions from the results').",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c13",
+    "claim": "Le découpage sémantique n'apporte pas d'amélioration systématique et fiable des performances de récupération par rapport au découpage de taille fixe.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, #5",
+    "verdict": "supported",
+    "justification": "Le document 'Is Semantic Chunking Worth the Computational Cost?.pdf' (notamment le chunk #0) indique explicitement que les bénéfices réels du découpage sémantique par rapport au découpage de taille fixe (fixed-size chunking) restent incertains et que les coûts informatiques ne sont pas justifiés par des gains de performance cohérents. De plus, le document 'LumberChunker: Long-Form Narrative Document Segmentation.pdf' (chunk #4) montre que le découpage sémantique (Semantic Chunking) échoue à s'échelonner efficacement et ne surpasse pas systématiquement les approches plus simples comme le découpage récursif (Recursive Chunking).",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf",
+      "LumberChunker: Long-Form Narrative Document Segmentation.pdf"
+    ],
+    "contradicting_sources": []
+  }
+]

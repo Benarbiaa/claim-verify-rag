@@ -1,0 +1,44 @@
+{
+  "claims": [
+    {
+      "id": "c1",
+      "claim": "Semantic chunking does not consistently improve retrieval performance compared to fixed-size chunking.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, chunk #4"
+    },
+    {
+      "id": "c2",
+      "claim": "The computational costs associated with semantic chunking are not justified by consistent performance gains.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, chunk #1, chunk #4"
+    },
+    {
+      "id": "c3",
+      "claim": "The advantages of semantic chunking are highly task-dependent and often minimal.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0, chunk #1, chunk #4"
+    },
+    {
+      "id": "c4",
+      "claim": "Semantic chunking showed performance benefits only in specific scenarios, such as artificially noisy, stitched datasets with high topic diversity.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #1, chunk #4"
+    },
+    {
+      "id": "c5",
+      "claim": "The Breakpoint-based Semantic Chunker outperformed others by preserving topic integrity in specific noisy datasets.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #1, chunk #4"
+    },
+    {
+      "id": "c6",
+      "claim": "On non-synthetic datasets that better reflect real-world documents, fixed-size chunking often performed better.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4, chunk #5"
+    },
+    {
+      "id": "c7",
+      "claim": "Fixed-size chunking performed best on 3 out of 5 datasets in evidence retrieval.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4, chunk #5"
+    },
+    {
+      "id": "c8",
+      "claim": "Fixed-size chunking remains a more efficient and reliable choice for practical RAG applications.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #5"
+    }
+  ]
+}

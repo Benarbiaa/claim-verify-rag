@@ -1,0 +1,91 @@
+[
+  {
+    "claim_id": "c1",
+    "claim": "The computational costs and added complexity associated with semantic chunking are not justified by consistent performance gains.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #0",
+    "verdict": "supported",
+    "justification": "The paper 'Is Semantic Chunking Worth the Computational Cost?.pdf' explicitly states in the abstract and conclusions that the computational costs associated with semantic chunking are not justified by consistent performance gains.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c2",
+    "claim": "Semantic chunking shows benefits in datasets with artificially high topic diversity.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf |chunk #0, chunk #1, chunk #4",
+    "verdict": "supported",
+    "justification": "The source document explicitly states that semantic chunking showed benefits in datasets with artificially high topic diversity (e.g., 'Semantic chunking occasionally improved performance, particularly on stitched datasets with high topic diversity' and 'In such cases, Breakpoint-based Semantic Chunker outperformed others by better preserving topic integrity...').",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c3",
+    "claim": "The benefits of semantic chunking are inconsistent and highly task-dependent.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf |chunk #0, chunk #1, chunk #4",
+    "verdict": "supported",
+    "justification": "The document 'Is Semantic Chunking Worth the Computational Cost?.pdf' explicitly states in both its abstract and conclusion chunks that the advantages and benefits of semantic chunking are highly task-dependent (or context-dependent) and inconsistent, often failing to justify the added computational costs compared to simpler fixed-size chunking.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c4",
+    "claim": "The benefits of semantic chunking are often insufficient to justify the computational cost.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf |chunk #0, chunk #1, chunk #4",
+    "verdict": "supported",
+    "justification": "The claim is supported by the paper 'Is Semantic Chunking Worth the Computational Cost?.pdf', which explicitly states in the abstract and conclusions that the performance gains of semantic chunking are inconsistent and often insufficient to justify the added computational costs compared to simpler methods like fixed-size chunking.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c5",
+    "claim": "On non-synthetic datasets that better reflect real-world documents, fixed-size chunking often performed better than semantic chunking.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #5",
+    "verdict": "supported",
+    "justification": "The claim is supported by the findings in 'Is Semantic Chunking Worth the Computational Cost?.pdf', which explicitly states in the conclusion and Section 4.3/4.4 that on non-synthetic datasets reflecting real-world documents, fixed-size chunking often performed better than semantic chunking.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c6",
+    "claim": "In evidence retrieval and answer generation tasks, the performance differences between fixed-size chunking and semantic chunkers were minimal.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #4",
+    "verdict": "supported",
+    "justification": "The document 'Is Semantic Chunking Worth the Computational Cost?.pdf' explicitly states in sections 4.3 and 4.4 that performance differences between fixed-size chunking and semantic chunkers in evidence retrieval and answer generation tasks were minimal.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c7",
+    "claim": "Fixed-size chunking remains a more efficient and reliable choice for practical RAG applications.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #5",
+    "verdict": "supported",
+    "justification": "The claim is explicitly supported by the findings in 'Is Semantic Chunking Worth the Computational Cost?.pdf', which states that fixed-size chunking remains a more efficient and reliable choice for practical RAG applications, especially when computational resources are limited or when working with standard document structures.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    ],
+    "contradicting_sources": []
+  },
+  {
+    "claim_id": "c8",
+    "claim": "RAG application performance is often more heavily influenced by embedding quality rather than the chunking strategy itself.",
+    "original_cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf | chunk #5",
+    "verdict": "supported",
+    "justification": "Source documents explicitly support the claim that RAG performance and chunking outcomes are heavily influenced by embedding quality/models rather than the chunking strategy alone. Specifically, 'Is Semantic Chunking Worth the Computational Cost?.pdf' (chunk #5) states that 'The impact of chunking strategy was often overshadowed by other factors, such as the quality of embeddings... In addition to the influence of embedding models, the absence of direct chunk quality metrics likely contributed to this issue.' Furthermore, 'anthropic-contextual-retrieval.md' (chunk #1) notes that embedding quality/models significantly drive performance improvements in RAG systems.",
+    "supporting_sources": [
+      "Is Semantic Chunking Worth the Computational Cost?.pdf",
+      "anthropic-contextual-retrieval.md"
+    ],
+    "contradicting_sources": []
+  }
+]

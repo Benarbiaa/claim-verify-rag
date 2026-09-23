@@ -1,0 +1,7 @@
+The evidence does **not** show a reliable advantage for semantic chunking over a simple fixed‑size approach.
+
+* The systematic evaluation in *Is Semantic Chunking Worth the Computational Cost?* found that semantic chunking “shows some benefits in certain scenarios, these are inconsistent and often insufficient to justify the computational cost” and that its advantages are “highly task‑dependent” compared with fixed‑size chunking [Is Semantic Chunking Worth the Computational Cost?.pdf].
+
+* In the LumberChunker study, semantic chunking produced lower DCG@k and Recall@k scores than other baselines (including fixed‑size / paragraph‑level chunking) and “fails to scale effectively as k increases,” indicating weaker retrieval performance [LumberChunker: Long-Form Narrative Document Segmentation.pdf].
+
+Together, these sources suggest that semantic chunking does **not** consistently improve retrieval performance relative to fixed‑size chunking, and any gains are modest, task‑specific, and often outweighed by the extra computational overhead.

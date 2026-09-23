@@ -1,0 +1,54 @@
+{
+  "claims": [
+    {
+      "id": "c1",
+      "claim": "The evidence does not show a reliable advantage for semantic chunking over a simple fixed-size approach.",
+      "cited_source": null
+    },
+    {
+      "id": "c2",
+      "claim": "The systematic evaluation in \"Is Semantic Chunking Worth the Computational Cost?\" found that semantic chunking shows some benefits in certain scenarios.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    },
+    {
+      "id": "c3",
+      "claim": "The benefits of semantic chunking are inconsistent and often insufficient to justify the computational cost.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    },
+    {
+      "id": "c4",
+      "claim": "The advantages of semantic chunking are highly task-dependent compared with fixed-size chunking.",
+      "cited_source": "Is Semantic Chunking Worth the Computational Cost?.pdf"
+    },
+    {
+      "id": "c5",
+      "claim": "In the LumberChunker study, semantic chunking produced lower DCG@k scores than other baselines (including fixed-size / paragraph-level chunking).",
+      "cited_source": "LumberChunker: Long-Form Narrative Document Segmentation.pdf"
+    },
+    {
+      "id": "c6",
+      "claim": "In the LumberChunker study, semantic chunking produced lower Recall@k scores than other baselines (including fixed-size / paragraph-level chunking).",
+      "cited_source": "LumberChunker: Long-Form Narrative Document Segmentation.pdf"
+    },
+    {
+      "id": "c7",
+      "claim": "Semantic chunking fails to scale effectively as k increases, indicating weaker retrieval performance.",
+      "cited_source": "LumberChunker: Long-Form Narrative Document Segmentation.pdf"
+    },
+    {
+      "id": "c8",
+      "claim": "Semantic chunking does not consistently improve retrieval performance relative to fixed-size chunking.",
+      "cited_source": null
+    },
+    {
+      "id": "c9",
+      "claim": "Gains from semantic chunking are modest and task-specific.",
+      "cited_source": null
+    },
+    {
+      "id": "c10",
+      "claim": "Gains from semantic chunking are often outweighed by the extra computational overhead.",
+      "cited_source": null
+    }
+  ]
+}
