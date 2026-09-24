@@ -1,0 +1,14 @@
+# Smoke-test questions: one per corpus "axis". Not the formal eval set (see eval/README.md).
+# Usage: make batch QUESTIONS=eval/smoke_questions.txt
+
+# Contested: Vectara vs LumberChunker should disagree
+Does semantic chunking improve retrieval performance compared to fixed-size chunking?
+
+# Clean baseline: Lewis et al.
+What is the original definition of Retrieval-Augmented Generation?
+
+# Different axis: Anthropic blog, should not be read as contradicting the chunking papers
+How does contextual retrieval reduce retrieval failure rate?
+
+# Single-source factual
+What chunking method does LumberChunker use?

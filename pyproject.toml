@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claimverify"
+version = "0.1.0"
+description = "Agentic RAG that decomposes its own answers into atomic claims and fact-checks each one against the full corpus."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Emir Benarbia" }]
+# Direct dependencies only. requirements.txt keeps the full pinned environment.
+dependencies = [
+    "langgraph",
+    "openai",
+    "psycopg2-binary",
+    "pypdf",
+    "python-dotenv",
+    "sentence-transformers",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+claimverify-ingest = "claimverify.ingest:main"
+claimverify-check = "claimverify.query_check:main"
+claimverify-draft = "claimverify.draft_answer:main"
+claimverify-decompose = "claimverify.decompose_claims:main"
+claimverify-verify = "claimverify.verify_claims:main"
+claimverify-run = "claimverify.run_pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+src = ["src", "tests"]

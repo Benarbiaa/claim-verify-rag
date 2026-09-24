@@ -12,7 +12,7 @@ Prérequis (à exécuter en local, pas dans ce sandbox) :
     # Voir setup_db() ci-dessous pour le schéma de la table.
 
 Usage :
-    python ingest.py --corpus_dir ./corpus --db_url postgresql://user:pass@localhost:5432/ragdb
+    python -m claimverify.ingest --corpus_dir ./data/corpus --db_url postgresql://user:pass@localhost:5432/ragdb
 """
 
 import argparse

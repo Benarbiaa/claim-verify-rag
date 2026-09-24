@@ -13,26 +13,18 @@ Prérequis :
     pip install openai python-dotenv
 
 Usage (en important la fonction depuis un autre script) :
-    from decompose_claims import decompose_into_claims
-    claims = decompose_into_claims(client, draft_answer_text)
+    from claimverify.decompose_claims import decompose_into_claims
+    from claimverify.llm import get_llm
+    claims = decompose_into_claims(get_llm("decompose"), draft_answer_text)
 
 Usage (en standalone, pour tester sur un texte donné) :
-    python decompose_claims.py --answer_file draft_answer_output.txt
+    python -m claimverify.decompose_claims --answer_file draft_answer_output.txt
 """
 
 import argparse
 import json
-import os
 
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()  # doit être appelé AVANT la lecture de LLM_MODEL ci-dessous
-
-# LLM_MODEL est lu depuis .env (LLM_MODEL=...), avec cette valeur par défaut
-# si non définie. Garder ça configurable évite d'éditer le code à chaque
-# dépréciation de modèle côté Groq (déjà arrivé deux fois sur ce projet).
-LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")  # modèle Groq utilisé pour la décomposition
+from claimverify.llm import LLM, get_llm  # modèle du rôle "decompose", voir llm.py
 
 DECOMPOSITION_SYSTEM_PROMPT = """You are a factual claim extractor. Your only task is to decompose
 a text into a list of atomic claims (individual factual assertions).
@@ -66,17 +58,15 @@ Respond ONLY with a valid JSON object, no text before or after, in this format:
 """
 
 
-def decompose_into_claims(client: OpenAI, draft_answer: str) -> list[dict]:
+def decompose_into_claims(llm: LLM, draft_answer: str) -> list[dict]:
     """Envoie la réponse brouillon au LLM et retourne la liste de claims parsée."""
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        response_format={"type": "json_object"},
-        messages=[
+    raw_text = llm.chat(
+        [
             {"role": "system", "content": DECOMPOSITION_SYSTEM_PROMPT},
             {"role": "user", "content": f"Text to decompose:\n\n{draft_answer}"},
         ],
+        json_mode=True,
     )
-    raw_text = response.choices[0].message.content
 
     try:
         parsed = json.loads(raw_text)
@@ -109,17 +99,13 @@ def main():
                               "(à utiliser ensuite comme entrée de verify_claims.py).")
     args = parser.parse_args()
 
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("La variable d'environnement GROQ_API_KEY n'est pas définie.")
+    llm = get_llm("decompose")
 
     with open(args.answer_file, "r", encoding="utf-8") as f:
         draft_answer = f.read()
 
-    client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
-
-    print("Décomposition en claims atomiques...")
-    claims = decompose_into_claims(client, draft_answer)
+    print(f"Décomposition en claims atomiques ({llm.describe()})...")
+    claims = decompose_into_claims(llm, draft_answer)
     print_claims(claims)
 
     if args.save_json:
@@ -129,4 +115,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()  

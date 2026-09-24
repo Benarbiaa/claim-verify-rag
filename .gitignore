@@ -1,5 +1,23 @@
+# secrets
 .env
+
+# python
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# pipeline outputs
 reports/
+*.draft.txt
+claims*.json
+verdicts*.json
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store

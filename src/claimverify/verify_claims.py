@@ -6,7 +6,8 @@ Pour chaque claim atomique (sortie de l'étape C) :
     1. Retrieval CIBLÉ ET PAR DOCUMENT (pas de réutilisation du cited_source
        du claim — on ignore délibérément d'où le claim brouillon prétendait
        venir, et on recherche indépendamment dans TOUT le corpus).
-    2. Un appel LLM séparé juge : supporté / contredit / non vérifiable,
+    2. Un appel LLM séparé — par défaut un modèle d'une AUTRE famille que
+       celui qui a rédigé la réponse (rôle "verify", voir llm.py) — juge : supporté / contredit / non vérifiable,
        avec justification et citation des sources utilisées pour le verdict.
 
 Orchestré avec LangGraph : un noeud retrieval -> un noeud verdict -> boucle
@@ -17,35 +18,24 @@ Prérequis :
 
 Usage :
     # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
-    python decompose_claims.py --answer_file res1.txt --save_json claims.json
+    python -m claimverify.decompose_claims --answer_file res1.txt --save_json claims.json
 
     # 2) Vérifier ces claims :
-    python verify_claims.py --claims_file claims.json \
+    python -m claimverify.verify_claims --claims_file claims.json \
         --db_url postgresql://rag_user:admin@localhost:5432/ragdb
 """
 
 import argparse
 import json
-import os
-import sys
-from pathlib import Path
 from typing import TypedDict
 
 import psycopg2
-from dotenv import load_dotenv
-from openai import OpenAI
 from langgraph.graph import StateGraph, END
 from sentence_transformers import SentenceTransformer
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.retrieval_utils import embed_query, format_evidence, load_embedding_model, search_per_document
+from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
+from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
-load_dotenv()  # doit être appelé AVANT la lecture de LLM_MODEL ci-dessous
-
-# LLM_MODEL est lu depuis .env (LLM_MODEL=...), avec cette valeur par défaut
-# si non définie. Garder ça configurable évite d'éditer le code à chaque
-# dépréciation de modèle côté Groq (déjà arrivé deux fois sur ce projet).
-LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")  # modèle Groq utilisé pour la vérification
 TOP_K_PER_DOC = 2
 
 VERDICT_SYSTEM_PROMPT = """You are a rigorous claim verifier (fact-checker). You are given a claim
@@ -113,7 +103,7 @@ class VerificationState(TypedDict):
     # ressources partagées, injectées une fois au démarrage
     embed_model: SentenceTransformer
     db_conn: object
-    llm_client: OpenAI
+    llm: LLM                     # modèle du rôle "verify"
     current_evidence: str        # preuve récupérée pour le claim courant (état intermédiaire)
 
 
@@ -141,15 +131,13 @@ cited by the claim):
 
 {state['current_evidence']}
 """
-    response = state["llm_client"].chat.completions.create(
-        model=LLM_MODEL,
-        response_format={"type": "json_object"},
-        messages=[
+    raw_text = state["llm"].chat(
+        [
             {"role": "system", "content": VERDICT_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
+        json_mode=True,
     )
-    raw_text = response.choices[0].message.content
 
     try:
         verdict_data = json.loads(raw_text)
@@ -165,6 +153,7 @@ cited by the claim):
         "claim_id": claim["id"],
         "claim": claim["claim"],
         "original_cited_source": claim.get("cited_source"),
+        "verifier_model": state["llm"].model,
         **verdict_data,
     }
 
@@ -242,9 +231,7 @@ def main():
     if not args.claims_file:
         raise RuntimeError("--claims_file est requis en dehors du mode --debug_claim.")
 
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("La variable d'environnement GROQ_API_KEY n'est pas définie.")
+    llm = get_llm("verify")
 
     with open(args.claims_file, "r", encoding="utf-8") as f:
         claims_data = json.load(f)
@@ -254,18 +241,17 @@ def main():
     embed_model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
 
     conn = psycopg2.connect(args.db_url)
-    llm_client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
 
     graph = build_graph()
 
-    print(f"\nVérification de {len(claims)} claims...\n")
+    print(f"\nVérification de {len(claims)} claims ({llm.describe()})...\n")
     initial_state: VerificationState = {
         "claims": claims,
         "current_index": 0,
         "verdicts": [],
         "embed_model": embed_model,
         "db_conn": conn,
-        "llm_client": llm_client,
+        "llm": llm,
         "current_evidence": "",
     }
 

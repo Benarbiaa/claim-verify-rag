@@ -7,19 +7,16 @@ chunks les plus proches, pour vérifier manuellement que le retrieval a du
 sens avant de construire la couche agentique par-dessus.
 
 Usage :
-    python query_check.py --db_url postgresql://rag_user:admin@localhost:5432/ragdb
-    python query_check.py --db_url ... --query "Does semantic chunking improve retrieval?"
-    python query_check.py --db_url ... --query "..." --per_document
+    python -m claimverify.query_check --db_url postgresql://rag_user:admin@localhost:5432/ragdb
+    python -m claimverify.query_check --db_url ... --query "Does semantic chunking improve retrieval?"
+    python -m claimverify.query_check --db_url ... --query "..." --per_document
 """
 
 import argparse
-import sys
-from pathlib import Path
 
 import psycopg2
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.retrieval_utils import embed_query, load_embedding_model, search_global, search_per_document
+from claimverify.retrieval import embed_query, load_embedding_model, search_global, search_per_document
 
 TOP_K = 5
 

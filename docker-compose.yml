@@ -1,0 +1,19 @@
+# Postgres 16 + pgvector, with the same credentials the README and Makefile use.
+# If you already run Postgres locally on 5432, change the host port (e.g. "5433:5432")
+# and pass DB_URL accordingly.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: claimverify-db
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: ragdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+volumes:
+  pgdata:

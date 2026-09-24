@@ -1,5 +1,5 @@
 """
-Module partagé de retrieval — utilisé par draft_answer.py, verify_claims.py,
+Module partagé de retrieval — utilisé par draft_answer, verify_claims,
 et query_check.py.
 
 Centralise la logique d'embedding de requête et de recherche par document,
