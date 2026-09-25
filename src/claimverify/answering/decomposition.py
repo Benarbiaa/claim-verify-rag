@@ -27,11 +27,29 @@ Usage (en standalone, sur un brouillon sauvegardé par drafting --save_to) :
 
 import argparse
 import json
+from typing import Protocol, runtime_checkable
 
 from pydantic import ValidationError
 
 from claimverify.contracts import Claim, Draft
 from claimverify.llm import LLM, get_llm  # modèle du rôle "decompose", voir llm.py
+
+
+@runtime_checkable
+class Decomposer(Protocol):
+    """Interface : découpe un brouillon en claims atomiques."""
+
+    def decompose(self, draft: Draft) -> list[Claim]: ...
+
+
+class LLMDecomposer:
+    """Implémentation : un LLM (rôle "decompose" de llm.py) en mode JSON."""
+
+    def __init__(self, llm: LLM):
+        self.llm = llm
+
+    def decompose(self, draft: Draft) -> list[Claim]:
+        return decompose_into_claims(self.llm, draft)
 
 DECOMPOSITION_SYSTEM_PROMPT = """You are a factual claim extractor. Your only task is to decompose
 a text into a list of atomic claims (individual factual assertions).

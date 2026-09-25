@@ -26,18 +26,18 @@ Usage :
 
 import argparse
 import json
-from typing import TypedDict
+from typing import Protocol, TypedDict, runtime_checkable
 
 import psycopg2
 from langgraph.graph import END, StateGraph
 from pydantic import ValidationError
 from sentence_transformers import SentenceTransformer
 
-from claimverify.answering.retrieval import format_evidence
+from claimverify.answering.retrieval import Retriever, format_evidence
 from claimverify.components.embedding import embed_query, load_embedding_model
 from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
-from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Verdict
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Passage, Verdict
 from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
 
 TOP_K_PER_DOC = 2
@@ -125,17 +125,17 @@ def retrieve_node(state: VerificationState) -> dict:
     return {"current_evidence": evidence}
 
 
-def verdict_node(state: VerificationState) -> dict:
-    claim = state["claims"][state["current_index"]]
+def judge_with_llm(llm: LLM, claim: Claim, evidence: str) -> Verdict:
+    """Demande un verdict au LLM pour un claim, à partir des passages déjà mis en forme."""
     user_message = f"""Claim to verify:
 "{claim.claim}"
 
 Source passages (from multiple documents, evaluated independently of the source originally
 cited by the claim):
 
-{state['current_evidence']}
+{evidence}
 """
-    raw_text = state["llm"].chat(
+    raw_text = llm.chat(
         [
             {"role": "system", "content": VERDICT_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
@@ -147,18 +147,22 @@ cited by the claim):
         "claim_id": claim.id,
         "claim": claim.claim,
         "original_cited_source": claim.cited_source,
-        "verifier": f"llm_judge:{state['llm'].model}",
+        "verifier": f"llm_judge:{llm.model}",
     }
     try:
-        verdict = Verdict(**identity, **json.loads(raw_text))
+        return Verdict(**identity, **json.loads(raw_text))
     except (json.JSONDecodeError, TypeError, ValidationError):
         # Réponse inexploitable (JSON invalide, verdict inconnu, champ manquant).
-        verdict = Verdict(
+        return Verdict(
             **identity,
             verdict="unverifiable",
             justification=f"Erreur de parsing JSON du LLM. Réponse brute : {raw_text[:200]}",
         )
 
+
+def verdict_node(state: VerificationState) -> dict:
+    claim = state["claims"][state["current_index"]]
+    verdict = judge_with_llm(state["llm"], claim, state["current_evidence"])
     print(f"  [{claim.id}] verdict : {verdict.verdict.upper()}")
 
     return {
@@ -185,6 +189,81 @@ def build_graph():
     graph.add_conditional_edges("verdict", should_continue, {"retrieve": "retrieve", "end": END})
 
     return graph.compile()
+
+
+# ---------------------------------------------------------------------------
+# Interfaces Judge et Verifier, et leurs implémentations
+# ---------------------------------------------------------------------------
+# Le Verifier fait "pour chaque claim : chercher des passages, puis juger".
+# Il REÇOIT un Retriever et un Judge : on peut remplacer l'un, l'autre, ou
+# tout le Verifier. L'état du graphe ne contient que des données.
+
+@runtime_checkable
+class Judge(Protocol):
+    """Interface : rend un verdict sur un claim, au vu de passages."""
+
+    def judge(self, claim: Claim, passages: list[Passage]) -> Verdict: ...
+
+
+class LLMJudge:
+    """Implémentation : un LLM (rôle "verify" de llm.py) avec VERDICT_SYSTEM_PROMPT."""
+
+    def __init__(self, llm: LLM):
+        self.llm = llm
+
+    def judge(self, claim: Claim, passages: list[Passage]) -> Verdict:
+        return judge_with_llm(self.llm, claim, format_evidence(passages))
+
+
+@runtime_checkable
+class Verifier(Protocol):
+    """Interface : rend un verdict pour chaque claim."""
+
+    def verify(self, claims: list[Claim]) -> list[Verdict]: ...
+
+
+class VerifierState(TypedDict):
+    claims: list[Claim]
+    current_index: int
+    passages: list[Passage]      # passages du claim en cours
+    verdicts: list[Verdict]
+
+
+class LangGraphVerifier:
+    """Implémentation : boucle LangGraph retrieve -> judge sur chaque claim."""
+
+    def __init__(self, retriever: Retriever, judge: Judge):
+        self.retriever = retriever
+        self.judge = judge
+        self.graph = self._build_graph()
+
+    def _build_graph(self):
+        def retrieve(state: VerifierState) -> dict:
+            claim = state["claims"][state["current_index"]]
+            return {"passages": self.retriever.retrieve(claim.claim)}
+
+        def judge(state: VerifierState) -> dict:
+            claim = state["claims"][state["current_index"]]
+            verdict = self.judge.judge(claim, state["passages"])
+            return {"verdicts": state["verdicts"] + [verdict],
+                    "current_index": state["current_index"] + 1}
+
+        graph = StateGraph(VerifierState)
+        graph.add_node("retrieve", retrieve)
+        graph.add_node("judge", judge)
+        graph.set_entry_point("retrieve")
+        graph.add_edge("retrieve", "judge")
+        graph.add_conditional_edges("judge", should_continue, {"retrieve": "retrieve", "end": END})
+        return graph.compile()
+
+    def verify(self, claims: list[Claim]) -> list[Verdict]:
+        if not claims:
+            return []
+        initial: VerifierState = {"claims": claims, "current_index": 0,
+                                  "passages": [], "verdicts": []}
+        # 2 étapes par claim (retrieve + judge) : la limite par défaut de
+        # LangGraph (25 étapes) ferait planter une réponse de plus de 12 claims.
+        return self.graph.invoke(initial, {"recursion_limit": 2 * len(claims) + 5})["verdicts"]
 
 
 # ---------------------------------------------------------------------------

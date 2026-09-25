@@ -1,34 +1,13 @@
 """LLM-facing steps tested with a fake client: no network, no GPU, no database."""
 
 import json
-from types import SimpleNamespace
 
 import pytest
 
 from claimverify.answering.decomposition import decompose_into_claims
 from claimverify.answering.verification import should_continue, verdict_node
 from claimverify.contracts import Claim, Draft
-from claimverify.llm import LLM
-
-
-class FakeClient:
-    """Mimics openai.OpenAI().chat.completions.create and returns a fixed string."""
-
-    def __init__(self, content: str):
-        message = SimpleNamespace(content=content)
-        response = SimpleNamespace(choices=[SimpleNamespace(message=message)])
-        self.calls = []
-
-        def create(**kwargs):
-            self.calls.append(kwargs)
-            return response
-
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
-
-
-def fake_llm(content: str, model: str = "fake-model") -> LLM:
-    return LLM(role="test", model=model, base_url="http://fake", client=FakeClient(content))
-
+from fakes import fake_llm
 
 DRAFT = Draft(question="Q?", text="RAG was introduced in 2020.", passages=[])
 

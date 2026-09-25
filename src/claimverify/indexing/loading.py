@@ -5,10 +5,25 @@ Chargement du corpus — PDF et Markdown vers Document
 
 import hashlib
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from pypdf import PdfReader
 
 from claimverify.contracts import Document
+
+
+@runtime_checkable
+class Loader(Protocol):
+    """Interface : lit un corpus et le convertit en Documents."""
+
+    def load(self, corpus_dir: Path) -> list[Document]: ...
+
+
+class FileLoader:
+    """Implémentation : fichiers PDF et Markdown d'un dossier."""
+
+    def load(self, corpus_dir: Path) -> list[Document]:
+        return load_corpus(corpus_dir)
 
 
 def parse_pdf(path: Path) -> str:

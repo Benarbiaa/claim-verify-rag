@@ -25,6 +25,7 @@ passages utilisés, relisible par decomposition --draft_file.
 """
 
 import argparse
+from typing import Protocol, runtime_checkable
 
 import psycopg2
 
@@ -36,6 +37,23 @@ from claimverify.contracts import Draft, Passage
 from claimverify.llm import LLM, get_llm  # modèle du rôle "draft", voir llm.py
 
 TOP_K_PER_DOC = 2  # top-k PAR document, pas top-k global — voir components/store.py
+
+
+@runtime_checkable
+class Drafter(Protocol):
+    """Interface : rédige une réponse à la question à partir des passages."""
+
+    def draft(self, question: str, passages: list[Passage]) -> Draft: ...
+
+
+class LLMDrafter:
+    """Implémentation : un LLM (rôle "draft" de llm.py) avec SYSTEM_PROMPT ci-dessous."""
+
+    def __init__(self, llm: LLM):
+        self.llm = llm
+
+    def draft(self, question: str, passages: list[Passage]) -> Draft:
+        return generate_draft_answer(self.llm, question, passages)
 
 SYSTEM_PROMPT = """You are an assistant that answers questions ONLY using the provided source
 passages. Strict rules:
