@@ -17,6 +17,7 @@ dependencies = [
     "pydantic",
     "pypdf",
     "python-dotenv",
+    "pyyaml",
     "sentence-transformers",
     "tqdm",
 ]

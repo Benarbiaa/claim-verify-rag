@@ -127,7 +127,11 @@ class LLM:
         return f"{self.model} @ {self.base_url}"
 
 
+def make_llm(role: str, model: str, base_url: str, api_key: str) -> LLM:
+    """Construit un LLM à partir de valeurs déjà résolues (utilisé par la factory)."""
+    return LLM(role=role, model=model, base_url=base_url, client=_client(base_url, api_key))
+
+
 def get_llm(role: str) -> LLM:
     cfg = get_config(role)
-    return LLM(role=cfg.role, model=cfg.model, base_url=cfg.base_url,
-               client=_client(cfg.base_url, cfg.api_key))
+    return make_llm(cfg.role, cfg.model, cfg.base_url, cfg.api_key)

@@ -1,0 +1,49 @@
+# Pipeline configuration: which implementation each stage uses, and its settings.
+# Secrets (API keys, database URL) stay in .env.
+#
+# The shape of this file is checked at startup (src/claimverify/settings.py):
+# an unknown key, stage type or provider stops the run with a clear message.
+# For an experiment, copy this file and run with --config <copy>.
+
+providers:                       # LLM endpoints; each names the .env variable holding its key
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+
+embedding:                       # shared by both pipelines: chunks and queries MUST use the same model
+  type: bge
+  model: BAAI/bge-base-en-v1.5
+  device: cuda
+
+indexing:
+  loader:
+    type: files
+  chunker:
+    type: fixed_size
+    chunk_size: 512
+    overlap_ratio: 0.15
+
+answering:
+  retriever:                     # used by the drafter
+    type: pgvector
+    top_k_per_doc: 2
+  drafter:
+    type: llm
+    provider: groq
+    model: openai/gpt-oss-120b
+  decomposer:
+    type: llm
+    provider: groq
+    model: openai/gpt-oss-120b
+  verifier:
+    type: langgraph
+    retriever:                   # its own retriever: can differ from the drafter's
+      type: pgvector
+      top_k_per_doc: 2
+    judge:                       # a different model family from the drafter, on purpose
+      type: llm
+      provider: groq
+      model: llama-3.3-70b-versatile
