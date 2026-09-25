@@ -28,7 +28,7 @@ any OpenAI-compatible LLM. Every stage is chosen and tuned in [`config.yaml`](co
 |---|---|---|
 | Draft answer | `openai/gpt-oss-120b` | Fluent, cited prose |
 | Claim decomposition | `openai/gpt-oss-120b` | Text transformation |
-| **Verification** | `llama-3.3-70b-versatile` | A **different model family** from the drafter, so the judge doesn't grade its own work |
+| **Verification** | `qwen/qwen3.8-27b` | A **different model family** from the drafter, so the judge doesn't grade its own work |
 
 Each stage sits behind an interface, and `config.yaml` picks its implementation and settings:
 moving the judge to another provider (Gemini, a local model with Ollama or vLLM…) is a change

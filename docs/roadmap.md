@@ -9,7 +9,7 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [x] **Modular pipeline**: data contracts (`contracts.py`), one interface per stage, and
   `config.yaml` + `factory.py` to choose each implementation. Secrets stay in `.env`.
 - [x] **Per-role LLM config** (now in `config.yaml`): draft and decompose on
-  `gpt-oss-120b`, verify on `llama-3.3-70b-versatile`. Every role can be moved to another
+  `gpt-oss-120b`, verify on `qwen/qwen3.8-27b` (Groq retired `llama-3.3-70b-versatile`). Every role can be moved to another
   OpenAI-compatible provider or a local model from `config.yaml`. The `verifier_model` is recorded in
   every verdict and in the report header.
 

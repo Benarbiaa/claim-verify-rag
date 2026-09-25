@@ -46,4 +46,4 @@ answering:
     judge:                       # a different model family from the drafter, on purpose
       type: llm
       provider: groq
-      model: llama-3.3-70b-versatile
+      model: qwen/qwen3.8-27b

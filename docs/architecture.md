@@ -53,7 +53,7 @@ system catch a claim that is true according to paper A but disputed by paper B.
 **3. The judge is a different model from the author.** If one model writes the answer and then
 checks it, its mistakes are correlated (whatever it misread while writing, it misreads the same
 way while checking), and it tends to approve its own output. `config.yaml` sets a provider
-and a model per stage (`answering.verifier.judge` for the verifier). By default the verifier is `llama-3.3-70b-versatile` (Meta), while the
+and a model per stage (`answering.verifier.judge` for the verifier). By default the verifier is `qwen/qwen3.8-27b` (Alibaba Qwen), while the
 drafter is `gpt-oss-120b` (OpenAI). Both run on Groq, so one key is enough, and each model has
 its own rate-limit quota.
 

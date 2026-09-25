@@ -40,7 +40,7 @@ def test_config_yaml_holds_todays_values():
     assert (s.indexing.chunker.chunk_size, s.indexing.chunker.overlap_ratio) == (512, 0.15)
     assert s.answering.retriever.top_k_per_doc == s.answering.verifier.retriever.top_k_per_doc == 2
     assert s.answering.drafter.model == "openai/gpt-oss-120b"
-    assert s.answering.verifier.judge.model == "llama-3.3-70b-versatile"
+    assert s.answering.verifier.judge.model == "qwen/qwen3.8-27b"
 
 
 def test_a_typo_in_a_key_is_rejected():
@@ -99,7 +99,7 @@ def test_build_answering(settings):
     assert isinstance(stages.verifier, LangGraphVerifier)
     assert isinstance(stages.verifier.judge, LLMJudge)
     assert stages.drafter.llm.model == "openai/gpt-oss-120b"
-    assert stages.verifier.judge.llm.model == "llama-3.3-70b-versatile"
+    assert stages.verifier.judge.llm.model == "qwen/qwen3.8-27b"
     assert stages.verifier.judge.llm.base_url == "https://api.groq.com/openai/v1"
 
 
