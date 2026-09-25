@@ -11,6 +11,8 @@ de scores de similarité plus élevés.
 
 from sentence_transformers import SentenceTransformer
 
+from claimverify.contracts import Passage
+
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 TOP_K_PER_DOC = 2
 
@@ -24,7 +26,7 @@ def embed_query(model: SentenceTransformer, text: str):
     return model.encode(instructed, normalize_embeddings=True).tolist()
 
 
-def search_global(conn, query_embedding, top_k: int = 5):
+def search_global(conn, query_embedding, top_k: int = 5) -> list[Passage]:
     """Recherche globale (top-k toutes sources confondues). Risque : un
     document dominant peut monopoliser les résultats et masquer des sources
     contradictoires pertinentes mais moins bien classées globalement. Utile
@@ -42,10 +44,11 @@ def search_global(conn, query_embedding, top_k: int = 5):
             """,
             (query_embedding, query_embedding, top_k),
         )
-        return cur.fetchall()
+        return [_to_passage(row) for row in cur.fetchall()]
 
 
-def search_per_document(conn, query_embedding, top_k_per_doc: int = TOP_K_PER_DOC):
+def search_per_document(conn, query_embedding,
+                        top_k_per_doc: int = TOP_K_PER_DOC) -> list[Passage]:
     """Récupère le top-k pour CHAQUE document du corpus plutôt qu'un top-k
     global. Garantit que chaque source a une chance d'être représentée,
     même si un document domine systématiquement le score de similarité
@@ -68,14 +71,21 @@ def search_per_document(conn, query_embedding, top_k_per_doc: int = TOP_K_PER_DO
                 """,
                 (query_embedding, filename, query_embedding, top_k_per_doc),
             )
-            all_results.extend(cur.fetchall())
+            all_results.extend(_to_passage(row) for row in cur.fetchall())
 
-        all_results.sort(key=lambda row: row[4], reverse=True)
+        all_results.sort(key=lambda p: p.score, reverse=True)
         return all_results
 
 
-def format_evidence(results) -> str:
+def _to_passage(row) -> Passage:
+    """Convertit une ligne SQL (filename, source_type, chunk_index, text, score)."""
+    filename, source_type, chunk_index, text, score = row
+    return Passage(filename=filename, source_type=source_type, chunk_index=chunk_index,
+                   text=text, score=score)
+
+
+def format_evidence(passages: list[Passage]) -> str:
     blocks = []
-    for filename, source_type, chunk_index, text, score in results:
-        blocks.append(f"[Source: {filename} | chunk #{chunk_index} | type: {source_type}]\n{text}")
+    for p in passages:
+        blocks.append(f"[Source: {p.filename} | chunk #{p.chunk_index} | type: {p.source_type}]\n{p.text}")
     return "\n\n---\n\n".join(blocks)

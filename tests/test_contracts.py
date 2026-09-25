@@ -3,11 +3,15 @@
 import pytest
 from pydantic import ValidationError
 
-from claimverify.contracts import VERDICT_LABELS, Claim, Draft, Passage, Verdict
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Draft, Passage, Verdict
 
 
 def test_verdict_labels_are_defined_once():
     assert VERDICT_LABELS == ("supported", "contradicted", "unverifiable")
+
+
+def test_every_verdict_label_has_an_icon():
+    assert set(VERDICT_ICONS) == set(VERDICT_LABELS)
 
 
 def test_unknown_verdict_label_is_rejected():

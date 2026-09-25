@@ -101,8 +101,8 @@ Other commands (`make help`):
 Each stage also runs on its own:
 
 ```bash
-python -m claimverify.draft_answer     --query "..." --save_to draft.txt
-python -m claimverify.decompose_claims --answer_file draft.txt --save_json claims.json
+python -m claimverify.draft_answer     --query "..." --save_to draft.json
+python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
 python -m claimverify.verify_claims    --claims_file claims.json --save_json verdicts.json
 python -m claimverify.verify_claims    --debug_claim "..."   # inspect one claim's evidence
 ```

@@ -18,7 +18,7 @@ Prérequis :
 
 Usage :
     # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
-    python -m claimverify.decompose_claims --answer_file res1.txt --save_json claims.json
+    python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
 
     # 2) Vérifier ces claims (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.verify_claims --claims_file claims.json
@@ -30,9 +30,11 @@ from typing import TypedDict
 
 import psycopg2
 from langgraph.graph import StateGraph, END
+from pydantic import ValidationError
 from sentence_transformers import SentenceTransformer
 
 from claimverify.config import add_db_url_argument
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Verdict
 from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
 from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
@@ -78,18 +80,18 @@ def debug_single_claim(claim_text: str, db_url: str):
 
     conn = psycopg2.connect(db_url)
     query_embedding = embed_query(embed_model, claim_text)
-    results = search_per_document(conn, query_embedding, top_k_per_doc=TOP_K_PER_DOC)
+    passages = search_per_document(conn, query_embedding, top_k_per_doc=TOP_K_PER_DOC)
     conn.close()
 
     print("=" * 100)
     print(f"CLAIM : {claim_text}")
     print("=" * 100)
-    for filename, source_type, chunk_index, text, score in results:
-        print(f"\n[score={score:.4f}] {filename} (#{chunk_index}, {source_type})")
+    for p in passages:
+        print(f"\n[score={p.score:.4f}] {p.filename} (#{p.chunk_index}, {p.source_type})")
         print(f"{'-' * 80}")
-        print(text)
+        print(p.text)
     print("\n" + "=" * 100)
-    print(f"Total : {len(results)} chunks depuis {len(set(r[0] for r in results))} document(s)")
+    print(f"Total : {len(passages)} chunks depuis {len({p.filename for p in passages})} document(s)")
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +99,9 @@ def debug_single_claim(claim_text: str, db_url: str):
 # ---------------------------------------------------------------------------
 
 class VerificationState(TypedDict):
-    claims: list[dict]          # claims à vérifier (sortie de l'étape C)
+    claims: list[Claim]         # claims à vérifier (sortie de l'étape C)
     current_index: int          # index du claim en cours de traitement
-    verdicts: list[dict]        # verdicts accumulés
+    verdicts: list[Verdict]     # verdicts accumulés
     # ressources partagées, injectées une fois au démarrage
     embed_model: SentenceTransformer
     db_conn: object
@@ -113,18 +115,18 @@ class VerificationState(TypedDict):
 
 def retrieve_node(state: VerificationState) -> dict:
     claim = state["claims"][state["current_index"]]
-    query_embedding = embed_query(state["embed_model"], claim["claim"])
-    results = search_per_document(state["db_conn"], query_embedding)
-    evidence = format_evidence(results)
-    print(f"  [{claim['id']}] retrieval : {len(results)} chunks récupérés depuis "
-          f"{len(set(r[0] for r in results))} document(s)")
+    query_embedding = embed_query(state["embed_model"], claim.claim)
+    passages = search_per_document(state["db_conn"], query_embedding)
+    evidence = format_evidence(passages)
+    print(f"  [{claim.id}] retrieval : {len(passages)} chunks récupérés depuis "
+          f"{len({p.filename for p in passages})} document(s)")
     return {"current_evidence": evidence}
 
 
 def verdict_node(state: VerificationState) -> dict:
     claim = state["claims"][state["current_index"]]
     user_message = f"""Claim to verify:
-"{claim['claim']}"
+"{claim.claim}"
 
 Source passages (from multiple documents, evaluated independently of the source originally
 cited by the claim):
@@ -139,28 +141,26 @@ cited by the claim):
         json_mode=True,
     )
 
-    try:
-        verdict_data = json.loads(raw_text)
-    except json.JSONDecodeError:
-        verdict_data = {
-            "verdict": "unverifiable",
-            "justification": f"Erreur de parsing JSON du LLM. Réponse brute : {raw_text[:200]}",
-            "supporting_sources": [],
-            "contradicting_sources": [],
-        }
-
-    verdict_entry = {
-        "claim_id": claim["id"],
-        "claim": claim["claim"],
-        "original_cited_source": claim.get("cited_source"),
-        "verifier_model": state["llm"].model,
-        **verdict_data,
+    identity = {
+        "claim_id": claim.id,
+        "claim": claim.claim,
+        "original_cited_source": claim.cited_source,
+        "verifier": f"llm_judge:{state['llm'].model}",
     }
+    try:
+        verdict = Verdict(**identity, **json.loads(raw_text))
+    except (json.JSONDecodeError, TypeError, ValidationError):
+        # Réponse inexploitable (JSON invalide, verdict inconnu, champ manquant).
+        verdict = Verdict(
+            **identity,
+            verdict="unverifiable",
+            justification=f"Erreur de parsing JSON du LLM. Réponse brute : {raw_text[:200]}",
+        )
 
-    print(f"  [{claim['id']}] verdict : {verdict_data['verdict'].upper()}")
+    print(f"  [{claim.id}] verdict : {verdict.verdict.upper()}")
 
     return {
-        "verdicts": state["verdicts"] + [verdict_entry],
+        "verdicts": state["verdicts"] + [verdict],
         "current_index": state["current_index"] + 1,
     }
 
@@ -189,10 +189,10 @@ def build_graph():
 # Point d'entrée
 # ---------------------------------------------------------------------------
 
-def print_summary(verdicts: list[dict]):
-    counts = {"supported": 0, "contradicted": 0, "unverifiable": 0}
+def print_summary(verdicts: list[Verdict]):
+    counts = dict.fromkeys(VERDICT_LABELS, 0)
     for v in verdicts:
-        counts[v["verdict"]] = counts.get(v["verdict"], 0) + 1
+        counts[v.verdict] += 1
 
     print("\n" + "=" * 100)
     print("RÉSUMÉ DE LA VÉRIFICATION")
@@ -203,12 +203,11 @@ def print_summary(verdicts: list[dict]):
           f"{counts['unverifiable']} non vérifiables\n")
 
     for v in verdicts:
-        icon = {"supported": "✓", "contradicted": "⚠", "unverifiable": "?"}[v["verdict"]]
-        print(f"[{icon}] {v['claim_id']} — {v['verdict'].upper()}")
-        print(f"    Claim : {v['claim']}")
-        print(f"    Justification : {v['justification']}")
-        if v.get("contradicting_sources"):
-            print(f"    Sources en contradiction : {v['contradicting_sources']}")
+        print(f"[{VERDICT_ICONS[v.verdict]}] {v.claim_id} — {v.verdict.upper()}")
+        print(f"    Claim : {v.claim}")
+        print(f"    Justification : {v.justification}")
+        if v.contradicting_sources:
+            print(f"    Sources en contradiction : {v.contradicting_sources}")
         print()
 
 
@@ -235,7 +234,8 @@ def main():
 
     with open(args.claims_file, "r", encoding="utf-8") as f:
         claims_data = json.load(f)
-    claims = claims_data["claims"] if "claims" in claims_data else claims_data
+    raw_claims = claims_data["claims"] if "claims" in claims_data else claims_data
+    claims = [Claim.model_validate(c) for c in raw_claims]
 
     print("Chargement du modèle d'embedding...")
     embed_model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
@@ -262,7 +262,8 @@ def main():
 
     if args.save_json:
         with open(args.save_json, "w", encoding="utf-8") as f:
-            json.dump(final_state["verdicts"], f, ensure_ascii=False, indent=2)
+            json.dump([v.model_dump() for v in final_state["verdicts"]], f,
+                      ensure_ascii=False, indent=2)
         print(f"Verdicts sauvegardés dans {args.save_json}")
 
 

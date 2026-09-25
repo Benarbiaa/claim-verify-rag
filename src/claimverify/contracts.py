@@ -23,6 +23,8 @@ from pydantic import BaseModel
 # (rapport, résumé, évaluation) les importe d'ici au lieu de les recopier.
 VerdictLabel = Literal["supported", "contradicted", "unverifiable"]
 VERDICT_LABELS: tuple[str, ...] = get_args(VerdictLabel)
+# Icône affichée pour chaque verdict dans les résumés et rapports.
+VERDICT_ICONS: dict[str, str] = {"supported": "✓", "contradicted": "⚠", "unverifiable": "?"}
 
 
 # --- Indexation ---------------------------------------------------------------

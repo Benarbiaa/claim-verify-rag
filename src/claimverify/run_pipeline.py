@@ -41,6 +41,7 @@ from pathlib import Path
 import psycopg2
 
 from claimverify.config import add_db_url_argument
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
 from claimverify.draft_answer import (
     TOP_K_PER_DOC as DRAFT_TOP_K_PER_DOC,
     generate_draft_answer,
@@ -48,7 +49,7 @@ from claimverify.draft_answer import (
 from claimverify.decompose_claims import decompose_into_claims
 from claimverify.llm import LLM, ROLES, get_llm
 from claimverify.verify_claims import build_graph, TOP_K_PER_DOC as VERIFY_TOP_K_PER_DOC
-from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
+from claimverify.retrieval import embed_query, load_embedding_model, search_per_document
 
 # Rapports écrits dans ./reports relatif au répertoire courant (racine du repo
 # quand on passe par le Makefile).
@@ -64,18 +65,17 @@ def run_single_question(query: str, embed_model, conn, llms: dict[str, LLM],
 
     # --- Étape B : réponse brouillon ---
     query_embedding = embed_query(embed_model, query)
-    results = search_per_document(conn, query_embedding, draft_top_k)
-    docs_covered = sorted(set(r[0] for r in results))
-    context = format_evidence(results)
+    passages = search_per_document(conn, query_embedding, draft_top_k)
+    docs_covered = sorted({p.filename for p in passages})
 
     t1 = time.perf_counter()
-    draft_answer = generate_draft_answer(llms["draft"], query, context)
+    draft = generate_draft_answer(llms["draft"], query, passages)
     t2 = time.perf_counter()
     timings["retrieval_draft_seconds"] = round(t1 - t0, 2)
     timings["generation_draft_seconds"] = round(t2 - t1, 2)
 
     # --- Étape C : décomposition en claims ---
-    claims = decompose_into_claims(llms["decompose"], draft_answer)
+    claims = decompose_into_claims(llms["decompose"], draft)
     t3 = time.perf_counter()
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
@@ -95,16 +95,17 @@ def run_single_question(query: str, embed_model, conn, llms: dict[str, LLM],
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)
 
-    counts = {"supported": 0, "contradicted": 0, "unverifiable": 0}
+    counts = dict.fromkeys(VERDICT_LABELS, 0)
     for v in verdicts:
-        counts[v["verdict"]] = counts.get(v["verdict"], 0) + 1
+        counts[v.verdict] += 1
 
+    # Le rapport est du JSON : on y met les contrats sous forme de dicts.
     return {
         "query": query,
         "draft_answer_docs_covered": docs_covered,
-        "draft_answer": draft_answer,
-        "claims": claims,
-        "verdicts": verdicts,
+        "draft_answer": draft.text,
+        "claims": [c.model_dump() for c in claims],
+        "verdicts": [v.model_dump() for v in verdicts],
         "verdict_counts": counts,
         "timings": timings,
     }
@@ -133,7 +134,7 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
         "",
     ]
 
-    total_counts = {"supported": 0, "contradicted": 0, "unverifiable": 0}
+    total_counts = dict.fromkeys(VERDICT_LABELS, 0)
     total_claims = 0
     for r in run_results:
         for k, v in r["verdict_counts"].items():
@@ -145,14 +146,11 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
             "## Aggregate summary",
             "",
             f"- Total claims across all questions: {total_claims}",
-            f"- Supported: {total_counts['supported']} "
-            f"({100 * total_counts['supported'] / max(total_claims, 1):.0f}%)",
-            f"- Contradicted: {total_counts['contradicted']} "
-            f"({100 * total_counts['contradicted'] / max(total_claims, 1):.0f}%)",
-            f"- Unverifiable: {total_counts['unverifiable']} "
-            f"({100 * total_counts['unverifiable'] / max(total_claims, 1):.0f}%)",
-            "",
         ]
+        for label in VERDICT_LABELS:
+            n = total_counts[label]
+            lines.append(f"- {label.capitalize()}: {n} ({100 * n / max(total_claims, 1):.0f}%)")
+        lines.append("")
 
     for i, r in enumerate(run_results, 1):
         lines += [
@@ -166,10 +164,9 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
             f"verification {r['timings']['verification_seconds']}s · "
             f"**total {r['timings']['total_seconds']}s**",
             "",
-            f"**Verdicts:** {r['verdict_counts']['supported']} supported, "
-            f"{r['verdict_counts']['contradicted']} contradicted, "
-            f"{r['verdict_counts']['unverifiable']} unverifiable "
-            f"(out of {len(r['claims'])} claims)",
+            "**Verdicts:** "
+            + ", ".join(f"{r['verdict_counts'][label]} {label}" for label in VERDICT_LABELS)
+            + f" (out of {len(r['claims'])} claims)",
             "",
             "### Draft answer",
             "",
@@ -179,7 +176,7 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
             "",
         ]
         for v in r["verdicts"]:
-            icon = {"supported": "✓", "contradicted": "⚠", "unverifiable": "?"}[v["verdict"]]
+            icon = VERDICT_ICONS[v["verdict"]]
             lines.append(f"- [{icon}] **{v['verdict'].upper()}** — {v['claim']}")
             lines.append(f"  - {v['justification']}")
             if v.get("contradicting_sources"):

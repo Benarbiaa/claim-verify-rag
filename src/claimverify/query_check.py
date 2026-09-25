@@ -37,9 +37,9 @@ def print_results(query: str, results):
     print("=" * 100)
     print(f"QUERY: {query}")
     print("=" * 100)
-    for rank, (filename, source_type, chunk_index, text, score) in enumerate(results, 1):
-        preview = text[:220].replace("\n", " ")
-        print(f"\n[{rank}] score={score:.4f}  source={filename} (#{chunk_index}, {source_type})")
+    for rank, p in enumerate(results, 1):
+        preview = p.text[:220].replace("\n", " ")
+        print(f"\n[{rank}] score={p.score:.4f}  source={p.filename} (#{p.chunk_index}, {p.source_type})")
         print(f"    {preview}...")
     print()
 

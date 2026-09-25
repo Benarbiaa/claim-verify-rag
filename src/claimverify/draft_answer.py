@@ -18,7 +18,10 @@ Prérequis :
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.draft_answer \
-        --query "Does semantic chunking improve retrieval performance?"
+        --query "Does semantic chunking improve retrieval performance?" --save_to draft.json
+
+Le fichier sauvegardé est un Draft (voir contracts.py) : question, réponse et
+passages utilisés, relisible par decompose_claims --draft_file.
 """
 
 import argparse
@@ -26,6 +29,7 @@ import argparse
 import psycopg2
 
 from claimverify.config import add_db_url_argument
+from claimverify.contracts import Draft, Passage
 from claimverify.llm import LLM, get_llm  # modèle du rôle "draft", voir llm.py
 from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
@@ -47,20 +51,21 @@ passages. Strict rules:
 """
 
 
-def generate_draft_answer(llm: LLM, query: str, context: str) -> str:
+def generate_draft_answer(llm: LLM, query: str, passages: list[Passage]) -> Draft:
     user_message = f"""Source passages (from multiple documents, treat each source independently
 and note any disagreement between them):
 
-{context}
+{format_evidence(passages)}
 
 ---
 
 Question: {query}
 """
-    return llm.chat([
+    answer = llm.chat([
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
     ])
+    return Draft(question=query, text=answer, passages=passages)
 
 
 def main():
@@ -69,8 +74,8 @@ def main():
     parser.add_argument("--query", type=str, required=True)
     parser.add_argument("--top_k_per_doc", type=int, default=TOP_K_PER_DOC)
     parser.add_argument("--save_to", type=str, default=None,
-                         help="Chemin optionnel pour sauvegarder la réponse brouillon en texte brut "
-                              "(pratique pour l'enchaîner directement avec decompose_claims.py).")
+                         help="Chemin optionnel pour sauvegarder le brouillon en JSON "
+                              "(entrée de decompose_claims --draft_file).")
     args = parser.parse_args()
 
     llm = get_llm("draft")
@@ -80,29 +85,27 @@ def main():
 
     conn = psycopg2.connect(args.db_url)
     query_embedding = embed_query(embed_model, args.query)
-    results = search_per_document(conn, query_embedding, args.top_k_per_doc)
+    passages = search_per_document(conn, query_embedding, args.top_k_per_doc)
     conn.close()
 
-    docs_covered = sorted(set(r[0] for r in results))
-    print(f"\n{len(results)} chunks récupérés depuis {len(docs_covered)} document(s) :")
+    docs_covered = sorted({p.filename for p in passages})
+    print(f"\n{len(passages)} chunks récupérés depuis {len(docs_covered)} document(s) :")
     for doc in docs_covered:
         print(f"  - {doc}")
 
-    context = format_evidence(results)
-
     print(f"\nGénération de la réponse brouillon ({llm.describe()})...\n")
-    answer = generate_draft_answer(llm, args.query, context)
+    draft = generate_draft_answer(llm, args.query, passages)
 
     print("=" * 100)
     print(f"QUESTION : {args.query}")
     print("=" * 100)
-    print(answer)
+    print(draft.text)
     print("=" * 100)
 
     if args.save_to:
         with open(args.save_to, "w", encoding="utf-8") as f:
-            f.write(answer)
-        print(f"\nRéponse sauvegardée dans {args.save_to}")
+            f.write(draft.model_dump_json(indent=2))
+        print(f"\nBrouillon sauvegardé dans {args.save_to}")
 
 
 if __name__ == "__main__":

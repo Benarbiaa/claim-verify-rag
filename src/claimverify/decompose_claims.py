@@ -12,18 +12,25 @@ pour garder chaque étape testable indépendamment).
 Prérequis :
     pip install openai python-dotenv
 
+Entrée : un Draft. Sortie : une liste de Claim (voir contracts.py). Chaque
+claim renvoyé par le LLM est validé ici : un claim mal formé arrête le run à
+cette étape, avec un message clair, au lieu de faire planter la vérification.
+
 Usage (en important la fonction depuis un autre script) :
     from claimverify.decompose_claims import decompose_into_claims
     from claimverify.llm import get_llm
-    claims = decompose_into_claims(get_llm("decompose"), draft_answer_text)
+    claims = decompose_into_claims(get_llm("decompose"), draft)
 
-Usage (en standalone, pour tester sur un texte donné) :
-    python -m claimverify.decompose_claims --answer_file draft_answer_output.txt
+Usage (en standalone, sur un brouillon sauvegardé par draft_answer --save_to) :
+    python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
 """
 
 import argparse
 import json
 
+from pydantic import ValidationError
+
+from claimverify.contracts import Claim, Draft
 from claimverify.llm import LLM, get_llm  # modèle du rôle "decompose", voir llm.py
 
 DECOMPOSITION_SYSTEM_PROMPT = """You are a factual claim extractor. Your only task is to decompose
@@ -58,12 +65,12 @@ Respond ONLY with a valid JSON object, no text before or after, in this format:
 """
 
 
-def decompose_into_claims(llm: LLM, draft_answer: str) -> list[dict]:
-    """Envoie la réponse brouillon au LLM et retourne la liste de claims parsée."""
+def decompose_into_claims(llm: LLM, draft: Draft) -> list[Claim]:
+    """Envoie la réponse brouillon au LLM et retourne la liste de claims validée."""
     raw_text = llm.chat(
         [
             {"role": "system", "content": DECOMPOSITION_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Text to decompose:\n\n{draft_answer}"},
+            {"role": "user", "content": f"Text to decompose:\n\n{draft.text}"},
         ],
         json_mode=True,
     )
@@ -79,21 +86,26 @@ def decompose_into_claims(llm: LLM, draft_answer: str) -> list[dict]:
     if not claims:
         raise RuntimeError(f"Aucun claim extrait. Réponse brute :\n{raw_text}")
 
-    return claims
+    try:
+        return [Claim.model_validate(c) for c in claims]
+    except ValidationError as e:
+        raise RuntimeError(
+            f"Le modèle a renvoyé un claim mal formé :\n{e}\nRéponse brute :\n{raw_text}"
+        ) from e
 
 
-def print_claims(claims: list[dict]):
+def print_claims(claims: list[Claim]):
     print(f"\n{len(claims)} claims extraits :\n")
     for c in claims:
-        source = c.get("cited_source") or "(aucune source citée)"
-        print(f"  [{c['id']}] {c['claim']}")
+        source = c.cited_source or "(aucune source citée)"
+        print(f"  [{c.id}] {c.claim}")
         print(f"        source: {source}\n")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--answer_file", type=str, required=True,
-                         help="Fichier texte contenant la réponse brouillon à décomposer.")
+    parser.add_argument("--draft_file", type=str, required=True,
+                         help="Brouillon en JSON (sortie de draft_answer --save_to).")
     parser.add_argument("--save_json", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder les claims en JSON "
                               "(à utiliser ensuite comme entrée de verify_claims.py).")
@@ -101,16 +113,16 @@ def main():
 
     llm = get_llm("decompose")
 
-    with open(args.answer_file, "r", encoding="utf-8") as f:
-        draft_answer = f.read()
+    with open(args.draft_file, "r", encoding="utf-8") as f:
+        draft = Draft.model_validate_json(f.read())
 
     print(f"Décomposition en claims atomiques ({llm.describe()})...")
-    claims = decompose_into_claims(llm, draft_answer)
+    claims = decompose_into_claims(llm, draft)
     print_claims(claims)
 
     if args.save_json:
         with open(args.save_json, "w", encoding="utf-8") as f:
-            json.dump({"claims": claims}, f, ensure_ascii=False, indent=2)
+            json.dump({"claims": [c.model_dump() for c in claims]}, f, ensure_ascii=False, indent=2)
         print(f"Claims sauvegardés dans {args.save_json}")
 
 
