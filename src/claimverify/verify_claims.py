@@ -20,9 +20,8 @@ Usage :
     # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
     python -m claimverify.decompose_claims --answer_file res1.txt --save_json claims.json
 
-    # 2) Vérifier ces claims :
-    python -m claimverify.verify_claims --claims_file claims.json \
-        --db_url postgresql://rag_user:admin@localhost:5432/ragdb
+    # 2) Vérifier ces claims (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+    python -m claimverify.verify_claims --claims_file claims.json
 """
 
 import argparse
@@ -33,6 +32,7 @@ import psycopg2
 from langgraph.graph import StateGraph, END
 from sentence_transformers import SentenceTransformer
 
+from claimverify.config import add_db_url_argument
 from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
 from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
@@ -216,7 +216,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--claims_file", type=str, default=None,
                          help="Fichier JSON contenant les claims (sortie de decompose_claims.py).")
-    parser.add_argument("--db_url", type=str, required=True)
+    add_db_url_argument(parser)
     parser.add_argument("--save_json", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder les verdicts en JSON.")
     parser.add_argument("--debug_claim", type=str, default=None,

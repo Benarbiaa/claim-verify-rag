@@ -11,8 +11,8 @@ Prérequis (à exécuter en local, pas dans ce sandbox) :
     #   CREATE EXTENSION IF NOT EXISTS vector;
     # Voir setup_db() ci-dessous pour le schéma de la table.
 
-Usage :
-    python -m claimverify.ingest --corpus_dir ./data/corpus --db_url postgresql://user:pass@localhost:5432/ragdb
+Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+    python -m claimverify.ingest --corpus_dir ./data/corpus
 """
 
 import argparse
@@ -25,6 +25,8 @@ from psycopg2.extras import execute_values
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
+
+from claimverify.config import add_db_url_argument
 
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 EMBEDDING_DIM = 768  # dimension de sortie de bge-base-en-v1.5
@@ -196,7 +198,7 @@ def store_chunks(conn, chunks: list[dict]):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--corpus_dir", type=Path, required=True)
-    parser.add_argument("--db_url", type=str, required=True)
+    add_db_url_argument(parser)
     args = parser.parse_args()
 
     print(f"Chargement du corpus depuis {args.corpus_dir}...")

@@ -20,13 +20,15 @@ Produit un rapport horodaté (JSON + Markdown) dans reports/, avec :
 Prérequis :
     pip install openai python-dotenv psycopg2-binary sentence-transformers langgraph
 
+--db_url est facultatif si DB_URL est dans .env (voir config.py).
+
 Usage (une question) :
-    python -m claimverify.run_pipeline --db_url postgresql://rag_user:admin@localhost:5432/ragdb \
+    python -m claimverify.run_pipeline \
         --query "Does semantic chunking improve retrieval performance?"
 
 Usage (plusieurs questions, fichier texte avec une question par ligne,
 lignes vides et lignes commençant par # ignorées) :
-    python -m claimverify.run_pipeline --db_url postgresql://rag_user:admin@localhost:5432/ragdb \
+    python -m claimverify.run_pipeline \
         --questions_file eval_questions.txt
 """
 
@@ -38,6 +40,7 @@ from pathlib import Path
 
 import psycopg2
 
+from claimverify.config import add_db_url_argument
 from claimverify.draft_answer import (
     TOP_K_PER_DOC as DRAFT_TOP_K_PER_DOC,
     generate_draft_answer,
@@ -188,7 +191,7 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db_url", type=str, required=True)
+    add_db_url_argument(parser)
     parser.add_argument("--query", type=str, default=None,
                          help="Une seule question à traiter.")
     parser.add_argument("--questions_file", type=str, default=None,

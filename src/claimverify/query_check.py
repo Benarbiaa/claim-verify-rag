@@ -6,16 +6,17 @@ Interroge la base pgvector avec quelques questions de test et affiche les
 chunks les plus proches, pour vérifier manuellement que le retrieval a du
 sens avant de construire la couche agentique par-dessus.
 
-Usage :
-    python -m claimverify.query_check --db_url postgresql://rag_user:admin@localhost:5432/ragdb
-    python -m claimverify.query_check --db_url ... --query "Does semantic chunking improve retrieval?"
-    python -m claimverify.query_check --db_url ... --query "..." --per_document
+Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+    python -m claimverify.query_check
+    python -m claimverify.query_check --query "Does semantic chunking improve retrieval?"
+    python -m claimverify.query_check --query "..." --per_document
 """
 
 import argparse
 
 import psycopg2
 
+from claimverify.config import add_db_url_argument
 from claimverify.retrieval import embed_query, load_embedding_model, search_global, search_per_document
 
 TOP_K = 5
@@ -45,7 +46,7 @@ def print_results(query: str, results):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db_url", type=str, required=True)
+    add_db_url_argument(parser)
     parser.add_argument("--query", type=str, default=None,
                          help="Si fourni, exécute uniquement cette question au lieu du jeu par défaut.")
     parser.add_argument("--top_k", type=int, default=TOP_K)

@@ -79,7 +79,8 @@ pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip 
 make db-up                         # or use your own Postgres with: CREATE EXTENSION vector;
 
 # 3. API key
-cp .env.example .env               # then set GROQ_API_KEY (the only required key)
+cp .env.example .env               # then set GROQ_API_KEY (the only required key);
+                                   # DB_URL already matches docker-compose.yml
 
 # 4. ingest the corpus
 make ingest
@@ -100,11 +101,14 @@ Other commands (`make help`):
 Each stage also runs on its own:
 
 ```bash
-python -m claimverify.draft_answer     --db_url $DB_URL --query "..." --save_to draft.txt
+python -m claimverify.draft_answer     --query "..." --save_to draft.txt
 python -m claimverify.decompose_claims --answer_file draft.txt --save_json claims.json
-python -m claimverify.verify_claims    --db_url $DB_URL --claims_file claims.json --save_json verdicts.json
-python -m claimverify.verify_claims    --db_url $DB_URL --debug_claim "..."   # inspect one claim's evidence
+python -m claimverify.verify_claims    --claims_file claims.json --save_json verdicts.json
+python -m claimverify.verify_claims    --debug_claim "..."   # inspect one claim's evidence
 ```
+
+Every script reads the database URL from `DB_URL` in `.env`. Pass `--db_url` to point one run at
+another database.
 
 ## Status
 

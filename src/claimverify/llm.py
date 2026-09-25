@@ -33,10 +33,9 @@ import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+import claimverify.config  # noqa: F401  (charge le .env)
 
 if os.getenv("LLM_MODEL"):
     warnings.warn(

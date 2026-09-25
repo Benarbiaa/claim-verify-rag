@@ -16,8 +16,8 @@ Prérequis :
     Variable dans le fichier .env :
     GROQ_API_KEY=...        (+ DRAFT_MODEL / DRAFT_BASE_URL optionnels, voir llm.py)
 
-Usage :
-    python -m claimverify.draft_answer --db_url postgresql://rag_user:admin@localhost:5432/ragdb \
+Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+    python -m claimverify.draft_answer \
         --query "Does semantic chunking improve retrieval performance?"
 """
 
@@ -25,6 +25,7 @@ import argparse
 
 import psycopg2
 
+from claimverify.config import add_db_url_argument
 from claimverify.llm import LLM, get_llm  # modèle du rôle "draft", voir llm.py
 from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
@@ -64,7 +65,7 @@ Question: {query}
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db_url", type=str, required=True)
+    add_db_url_argument(parser)
     parser.add_argument("--query", type=str, required=True)
     parser.add_argument("--top_k_per_doc", type=int, default=TOP_K_PER_DOC)
     parser.add_argument("--save_to", type=str, default=None,
