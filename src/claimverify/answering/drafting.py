@@ -3,7 +3,7 @@ Génération de réponse brouillon — Étape B
 ============================================
 
 Boucle : question -> retrieval PAR DOCUMENT (chaque source du corpus a une
-chance d'être représentée, voir retrieval.py) -> génération d'une
+chance d'être représentée, voir components/store.py) -> génération d'une
 réponse via le LLM du rôle "draft" (voir llm.py), en citant les sources utilisées.
 
 Pas encore de décomposition en claims ni de vérification à ce stade — on
@@ -17,23 +17,25 @@ Prérequis :
     GROQ_API_KEY=...        (+ DRAFT_MODEL / DRAFT_BASE_URL optionnels, voir llm.py)
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
-    python -m claimverify.draft_answer \
+    python -m claimverify.answering.drafting \
         --query "Does semantic chunking improve retrieval performance?" --save_to draft.json
 
 Le fichier sauvegardé est un Draft (voir contracts.py) : question, réponse et
-passages utilisés, relisible par decompose_claims --draft_file.
+passages utilisés, relisible par decomposition --draft_file.
 """
 
 import argparse
 
 import psycopg2
 
+from claimverify.answering.retrieval import format_evidence
+from claimverify.components.embedding import embed_query, load_embedding_model
+from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import Draft, Passage
 from claimverify.llm import LLM, get_llm  # modèle du rôle "draft", voir llm.py
-from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
-TOP_K_PER_DOC = 2  # top-k PAR document, pas top-k global — voir retrieval.py
+TOP_K_PER_DOC = 2  # top-k PAR document, pas top-k global — voir components/store.py
 
 SYSTEM_PROMPT = """You are an assistant that answers questions ONLY using the provided source
 passages. Strict rules:
@@ -75,7 +77,7 @@ def main():
     parser.add_argument("--top_k_per_doc", type=int, default=TOP_K_PER_DOC)
     parser.add_argument("--save_to", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder le brouillon en JSON "
-                              "(entrée de decompose_claims --draft_file).")
+                              "(entrée de decomposition --draft_file).")
     args = parser.parse_args()
 
     llm = get_llm("draft")

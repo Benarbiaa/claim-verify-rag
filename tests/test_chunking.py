@@ -1,7 +1,8 @@
 import pytest
 
+from claimverify.components.store import store_chunks
 from claimverify.contracts import Chunk, Document
-from claimverify.ingest import build_chunks, chunk_text, store_chunks
+from claimverify.indexing.chunking import build_chunks, chunk_text
 
 
 def test_short_text_is_single_chunk():

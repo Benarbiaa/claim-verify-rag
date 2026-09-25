@@ -38,11 +38,11 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [ ] **P0-4. Re-ingest after the corpus rename.** `make db-reset ingest`. See
   `data/corpus/SOURCES.md`.
 
-- [ ] **P0-5. Housekeeping.** The `draft_answer.py` docstring still says "Gemini".
-  `requirements.txt` pins unused packages (anthropic, google-*, Spark, …); regenerate it from
-  the direct dependencies in `pyproject.toml`. `TOP_K_PER_DOC` is duplicated across
-  3 modules; move it into one `config.py`. `ingest.py` imports `tqdm` without using
-  it (flagged by `make lint`).
+- [ ] **P0-5. Housekeeping.** `requirements.txt` pins unused packages (anthropic, google-*,
+  Spark, …); regenerate it from the direct dependencies in `pyproject.toml`. `TOP_K_PER_DOC`
+  is duplicated across 3 modules (`components/store.py`, `answering/drafting.py`,
+  `answering/verification.py`); move it into one `config.py`. (The unused `tqdm` import went
+  away when `ingest.py` was split.)
 
 ## P1: Step F, evaluation (the part recruiters will look at)
 

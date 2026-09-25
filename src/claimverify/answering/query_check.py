@@ -7,17 +7,18 @@ chunks les plus proches, pour vérifier manuellement que le retrieval a du
 sens avant de construire la couche agentique par-dessus.
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
-    python -m claimverify.query_check
-    python -m claimverify.query_check --query "Does semantic chunking improve retrieval?"
-    python -m claimverify.query_check --query "..." --per_document
+    python -m claimverify.answering.query_check
+    python -m claimverify.answering.query_check --query "Does semantic chunking improve retrieval?"
+    python -m claimverify.answering.query_check --query "..." --per_document
 """
 
 import argparse
 
 import psycopg2
 
+from claimverify.components.embedding import embed_query, load_embedding_model
+from claimverify.components.store import search_global, search_per_document
 from claimverify.config import add_db_url_argument
-from claimverify.retrieval import embed_query, load_embedding_model, search_global, search_per_document
 
 TOP_K = 5
 

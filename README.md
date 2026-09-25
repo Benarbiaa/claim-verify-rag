@@ -52,14 +52,23 @@ Full titles: [`data/corpus/SOURCES.md`](data/corpus/SOURCES.md).
 ## Repository layout
 
 ```
-├── src/claimverify/        # the package
-│   ├── ingest.py           #   A: parse → chunk → embed → store
-│   ├── retrieval.py        #   shared per-document / global search
-│   ├── query_check.py      #   retrieval sanity check (no LLM)
-│   ├── draft_answer.py     #   B: grounded draft answer
-│   ├── decompose_claims.py #   C: atomic claims
-│   ├── verify_claims.py    #   D: LangGraph verification loop
-│   └── run_pipeline.py     #   B→C→D in one run + timed report
+├── src/claimverify/            # the package
+│   ├── contracts.py            #   data objects passed between stages
+│   ├── config.py, llm.py       #   .env loading, per-role LLM config
+│   ├── components/             #   shared by both pipelines
+│   │   ├── embedding.py        #     bge model: embeds chunks, questions and claims
+│   │   └── store.py            #     pgvector: table setup, writing, searching
+│   ├── indexing/               #   pipeline 1: files → database
+│   │   ├── loading.py          #     PDF / Markdown → Document
+│   │   ├── chunking.py         #     Document → Chunk
+│   │   └── ingest.py           #     A: load → chunk → embed → store
+│   └── answering/              #   pipeline 2: question → verdicts
+│       ├── retrieval.py        #     passages formatted for prompts
+│       ├── drafting.py         #     B: grounded draft answer
+│       ├── decomposition.py    #     C: atomic claims
+│       ├── verification.py     #     D: LangGraph verification loop
+│       ├── pipeline.py         #     B→C→D in one run + timed report
+│       └── query_check.py      #     retrieval sanity check (no LLM)
 ├── data/corpus/            # source documents
 ├── eval/                   # evaluation sets and protocol (Step F)
 ├── tests/                  # unit tests (no DB / GPU / API key needed)
@@ -101,10 +110,10 @@ Other commands (`make help`):
 Each stage also runs on its own:
 
 ```bash
-python -m claimverify.draft_answer     --query "..." --save_to draft.json
-python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
-python -m claimverify.verify_claims    --claims_file claims.json --save_json verdicts.json
-python -m claimverify.verify_claims    --debug_claim "..."   # inspect one claim's evidence
+python -m claimverify.answering.drafting      --query "..." --save_to draft.json
+python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
+python -m claimverify.answering.verification --claims_file claims.json --save_json verdicts.json
+python -m claimverify.answering.verification --debug_claim "..."   # inspect one claim's evidence
 ```
 
 Every script reads the database URL from `DB_URL` in `.env`. Pass `--db_url` to point one run at

@@ -23,12 +23,12 @@ Prérequis :
 --db_url est facultatif si DB_URL est dans .env (voir config.py).
 
 Usage (une question) :
-    python -m claimverify.run_pipeline \
+    python -m claimverify.answering.pipeline \
         --query "Does semantic chunking improve retrieval performance?"
 
 Usage (plusieurs questions, fichier texte avec une question par ligne,
 lignes vides et lignes commençant par # ignorées) :
-    python -m claimverify.run_pipeline \
+    python -m claimverify.answering.pipeline \
         --questions_file eval_questions.txt
 """
 
@@ -40,16 +40,20 @@ from pathlib import Path
 
 import psycopg2
 
-from claimverify.config import add_db_url_argument
-from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
-from claimverify.draft_answer import (
+from claimverify.answering.decomposition import decompose_into_claims
+from claimverify.answering.drafting import (
     TOP_K_PER_DOC as DRAFT_TOP_K_PER_DOC,
+)
+from claimverify.answering.drafting import (
     generate_draft_answer,
 )
-from claimverify.decompose_claims import decompose_into_claims
+from claimverify.answering.verification import TOP_K_PER_DOC as VERIFY_TOP_K_PER_DOC
+from claimverify.answering.verification import build_graph
+from claimverify.components.embedding import embed_query, load_embedding_model
+from claimverify.components.store import search_per_document
+from claimverify.config import add_db_url_argument
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
 from claimverify.llm import LLM, ROLES, get_llm
-from claimverify.verify_claims import build_graph, TOP_K_PER_DOC as VERIFY_TOP_K_PER_DOC
-from claimverify.retrieval import embed_query, load_embedding_model, search_per_document
 
 # Rapports écrits dans ./reports relatif au répertoire courant (racine du repo
 # quand on passe par le Makefile).

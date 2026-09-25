@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from claimverify.answering.decomposition import decompose_into_claims
+from claimverify.answering.verification import should_continue, verdict_node
 from claimverify.contracts import Claim, Draft
-from claimverify.decompose_claims import decompose_into_claims
 from claimverify.llm import LLM
-from claimverify.verify_claims import should_continue, verdict_node
 
 
 class FakeClient:

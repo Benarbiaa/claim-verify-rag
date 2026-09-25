@@ -25,12 +25,12 @@ dependencies = [
 dev = ["pytest", "ruff"]
 
 [project.scripts]
-claimverify-ingest = "claimverify.ingest:main"
-claimverify-check = "claimverify.query_check:main"
-claimverify-draft = "claimverify.draft_answer:main"
-claimverify-decompose = "claimverify.decompose_claims:main"
-claimverify-verify = "claimverify.verify_claims:main"
-claimverify-run = "claimverify.run_pipeline:main"
+claimverify-ingest = "claimverify.indexing.ingest:main"
+claimverify-check = "claimverify.answering.query_check:main"
+claimverify-draft = "claimverify.answering.drafting:main"
+claimverify-decompose = "claimverify.answering.decomposition:main"
+claimverify-verify = "claimverify.answering.verification:main"
+claimverify-run = "claimverify.answering.pipeline:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

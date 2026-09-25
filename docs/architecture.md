@@ -4,33 +4,38 @@
 question
    │
    ▼
-[retrieval]      per-document top-k (claimverify/retrieval.py)
+[retrieval]      per-document top-k (components/store.py)
    │
    ▼
-[draft]          LLM answer grounded in passages, with citations    (draft_answer.py)
+[draft]          LLM answer grounded in passages, with citations    (answering/drafting.py)
    │
    ▼
-[decompose]      LLM → atomic, self-contained claims (JSON)         (decompose_claims.py)
+[decompose]      LLM → atomic, self-contained claims (JSON)         (answering/decomposition.py)
    │
    ▼
-[verify loop]    LangGraph: retrieve(claim) → verdict(claim) → next (verify_claims.py)
+[verify loop]    LangGraph: retrieve(claim) → verdict(claim) → next (answering/verification.py)
    │
    ▼
-report           supported / contradicted / unverifiable + justification (run_pipeline.py)
+report           supported / contradicted / unverifiable + justification (answering/pipeline.py)
 ```
 
 ## Module map
 
 | Module | Stage | Needs DB | Needs LLM | Needs GPU |
 |---|---|---|---|---|
-| `ingest.py` | A: parse → chunk → embed → store | yes | no | yes (CPU works) |
-| `retrieval.py` | shared query embedding + search | yes | no | yes |
+| `contracts.py` | data objects passed between stages | no | no | no |
 | `llm.py` | per-role LLM config (draft / decompose / verify) | no | — | no |
-| `query_check.py` | retrieval sanity check | yes | no | yes |
-| `draft_answer.py` | B: grounded draft | yes | yes | yes |
-| `decompose_claims.py` | C: atomic claims | no | yes | no |
-| `verify_claims.py` | D: per-claim verification graph | yes | yes | yes |
-| `run_pipeline.py` | B → C → D + timed report | yes | yes | yes |
+| `components/embedding.py` | shared: embeds chunks, questions and claims | no | no | yes (CPU works) |
+| `components/store.py` | shared: pgvector setup, writing, search | yes | no | no |
+| `indexing/loading.py` | A: PDF / Markdown → Document | no | no | no |
+| `indexing/chunking.py` | A: Document → Chunk | no | no | no |
+| `indexing/ingest.py` | A: load → chunk → embed → store | yes | no | yes (CPU works) |
+| `answering/retrieval.py` | passages formatted for prompts | no | no | no |
+| `answering/query_check.py` | retrieval sanity check | yes | no | yes |
+| `answering/drafting.py` | B: grounded draft | yes | yes | yes |
+| `answering/decomposition.py` | C: atomic claims | no | yes | no |
+| `answering/verification.py` | D: per-claim verification graph | yes | yes | yes |
+| `answering/pipeline.py` | B → C → D + timed report | yes | yes | yes |
 
 ## Key design decisions
 

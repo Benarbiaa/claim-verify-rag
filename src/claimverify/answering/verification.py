@@ -18,10 +18,10 @@ Prérequis :
 
 Usage :
     # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
-    python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
+    python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
 
     # 2) Vérifier ces claims (--db_url facultatif si DB_URL est dans .env, voir config.py) :
-    python -m claimverify.verify_claims --claims_file claims.json
+    python -m claimverify.answering.verification --claims_file claims.json
 """
 
 import argparse
@@ -29,14 +29,16 @@ import json
 from typing import TypedDict
 
 import psycopg2
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from pydantic import ValidationError
 from sentence_transformers import SentenceTransformer
 
+from claimverify.answering.retrieval import format_evidence
+from claimverify.components.embedding import embed_query, load_embedding_model
+from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Verdict
 from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
-from claimverify.retrieval import embed_query, format_evidence, load_embedding_model, search_per_document
 
 TOP_K_PER_DOC = 2
 
@@ -214,7 +216,7 @@ def print_summary(verdicts: list[Verdict]):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--claims_file", type=str, default=None,
-                         help="Fichier JSON contenant les claims (sortie de decompose_claims.py).")
+                         help="Fichier JSON contenant les claims (sortie de decomposition.py).")
     add_db_url_argument(parser)
     parser.add_argument("--save_json", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder les verdicts en JSON.")

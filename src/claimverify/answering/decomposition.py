@@ -17,12 +17,12 @@ claim renvoyé par le LLM est validé ici : un claim mal formé arrête le run �
 cette étape, avec un message clair, au lieu de faire planter la vérification.
 
 Usage (en important la fonction depuis un autre script) :
-    from claimverify.decompose_claims import decompose_into_claims
+    from claimverify.answering.decomposition import decompose_into_claims
     from claimverify.llm import get_llm
     claims = decompose_into_claims(get_llm("decompose"), draft)
 
-Usage (en standalone, sur un brouillon sauvegardé par draft_answer --save_to) :
-    python -m claimverify.decompose_claims --draft_file draft.json --save_json claims.json
+Usage (en standalone, sur un brouillon sauvegardé par drafting --save_to) :
+    python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
 """
 
 import argparse
@@ -105,10 +105,10 @@ def print_claims(claims: list[Claim]):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--draft_file", type=str, required=True,
-                         help="Brouillon en JSON (sortie de draft_answer --save_to).")
+                         help="Brouillon en JSON (sortie de drafting --save_to).")
     parser.add_argument("--save_json", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder les claims en JSON "
-                              "(à utiliser ensuite comme entrée de verify_claims.py).")
+                              "(à utiliser ensuite comme entrée de verification.py).")
     args = parser.parse_args()
 
     llm = get_llm("decompose")
