@@ -14,6 +14,7 @@ dependencies = [
     "langgraph",
     "openai",
     "psycopg2-binary",
+    "pydantic",
     "pypdf",
     "python-dotenv",
     "sentence-transformers",
