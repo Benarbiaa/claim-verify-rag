@@ -27,6 +27,7 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from claimverify.config import add_db_url_argument
+from claimverify.contracts import Chunk, Document
 
 EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 EMBEDDING_DIM = 768  # dimension de sortie de bge-base-en-v1.5
@@ -48,8 +49,8 @@ def parse_markdown(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def load_corpus(corpus_dir: Path) -> list[dict]:
-    """Retourne une liste de {doc_id, filename, source_type, text}."""
+def load_corpus(corpus_dir: Path) -> list[Document]:
+    """Lit chaque fichier PDF ou Markdown du dossier et le convertit en Document."""
     documents = []
     for path in sorted(corpus_dir.iterdir()):
         if path.suffix.lower() == ".pdf":
@@ -62,12 +63,12 @@ def load_corpus(corpus_dir: Path) -> list[dict]:
             continue
 
         doc_id = hashlib.sha1(path.name.encode()).hexdigest()[:12]
-        documents.append({
-            "doc_id": doc_id,
-            "filename": path.name,
-            "source_type": source_type,
-            "text": text,
-        })
+        documents.append(Document(
+            doc_id=doc_id,
+            filename=path.name,
+            source_type=source_type,
+            text=text,
+        ))
     return documents
 
 
@@ -99,21 +100,20 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_TOKENS,
     return chunks
 
 
-def build_chunks(documents: list[dict]) -> list[dict]:
-    """Retourne une liste de {chunk_id, doc_id, filename, source_type, chunk_index, text}."""
+def build_chunks(documents: list[Document]) -> list[Chunk]:
+    """Découpe chaque document en Chunk (sans embedding : c'est l'étape suivante)."""
     all_chunks = []
     for doc in documents:
-        pieces = chunk_text(doc["text"])
+        pieces = chunk_text(doc.text)
         for i, piece in enumerate(pieces):
-            chunk_id = f"{doc['doc_id']}_{i:04d}"
-            all_chunks.append({
-                "chunk_id": chunk_id,
-                "doc_id": doc["doc_id"],
-                "filename": doc["filename"],
-                "source_type": doc["source_type"],
-                "chunk_index": i,
-                "text": piece,
-            })
+            all_chunks.append(Chunk(
+                chunk_id=f"{doc.doc_id}_{i:04d}",
+                doc_id=doc.doc_id,
+                filename=doc.filename,
+                source_type=doc.source_type,
+                chunk_index=i,
+                text=piece,
+            ))
     return all_chunks
 
 
@@ -121,9 +121,10 @@ def build_chunks(documents: list[dict]) -> list[dict]:
 # 3. Embedding — bge-base-en-v1.5 sur GPU si disponible
 # ---------------------------------------------------------------------------
 
-def embed_chunks(chunks: list[dict], model_name: str = EMBEDDING_MODEL) -> list[dict]:
+def embed_chunks(chunks: list[Chunk], model_name: str = EMBEDDING_MODEL) -> list[Chunk]:
+    """Retourne de NOUVEAUX chunks avec leur embedding : la liste reçue n'est pas modifiée."""
     model = SentenceTransformer(model_name, device="cuda")  # passe à "cpu" si pas de GPU dispo
-    texts = [c["text"] for c in chunks]
+    texts = [c.text for c in chunks]
 
     # bge recommande un préfixe pour les documents (pas pour les queries) —
     # cf. la doc du modèle sur Hugging Face pour bge-base-en-v1.5.
@@ -134,9 +135,10 @@ def embed_chunks(chunks: list[dict], model_name: str = EMBEDDING_MODEL) -> list[
         normalize_embeddings=True,  # cosine similarity <-> produit scalaire
     )
 
-    for chunk, emb in zip(chunks, embeddings):
-        chunk["embedding"] = emb.tolist()
-    return chunks
+    return [
+        chunk.model_copy(update={"embedding": emb.tolist()})
+        for chunk, emb in zip(chunks, embeddings)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -168,12 +170,18 @@ def setup_db(conn):
     conn.commit()
 
 
-def store_chunks(conn, chunks: list[dict]):
-    rows = [
-        (
-            c["chunk_id"], c["doc_id"], c["filename"], c["source_type"],
-            c["chunk_index"], c["text"], c["embedding"],
+def store_chunks(conn, chunks: list[Chunk]):
+    # Vérifié avant de toucher la base : un chunk sans embedding vient d'une
+    # étape d'embedding sautée ou défaillante, c'est elle qu'il faut signaler.
+    missing = [c.chunk_id for c in chunks if c.embedding is None]
+    if missing:
+        raise ValueError(
+            f"{len(missing)} chunk(s) sans embedding (ex. {missing[0]}) : "
+            "lancer embed_chunks avant store_chunks."
         )
+
+    rows = [
+        (c.chunk_id, c.doc_id, c.filename, c.source_type, c.chunk_index, c.text, c.embedding)
         for c in chunks
     ]
     with conn.cursor() as cur:
@@ -203,7 +211,7 @@ def main():
 
     print(f"Chargement du corpus depuis {args.corpus_dir}...")
     documents = load_corpus(args.corpus_dir)
-    print(f"  {len(documents)} documents chargés : {[d['filename'] for d in documents]}")
+    print(f"  {len(documents)} documents chargés : {[d.filename for d in documents]}")
 
     print("Découpage en chunks...")
     chunks = build_chunks(documents)
