@@ -54,6 +54,13 @@ them before building the eval baseline**, or the numbers you report will be skew
   2 LLMs. Report accuracy, latency and tokens.
 - [ ] Deduplicate near-identical claims after decomposition (embedding cosine > ~0.92), and
   measure how much verification time it saves.
+- [ ] **Verifier experiment: plain loop vs. agentic loop.** Today the LangGraph verifier is a
+  straight loop (retrieve → judge per claim), so LangGraph adds complexity without deciding
+  anything. Compare two `Verifier` implementations:
+  `LoopVerifier` (a plain `for` loop, the simple default) and `AgenticVerifier` (LangGraph with
+  a real decision: when the verdict is `unverifiable`, reformulate the query, retrieve again and
+  re-judge, at most 2 tries). Measure wrong-`unverifiable` rate, accuracy and extra API calls.
+  LangGraph checkpointing could also let long evaluation runs resume after a rate-limit stop.
 
 ## P2: robustness and engineering
 
