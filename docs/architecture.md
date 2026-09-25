@@ -24,7 +24,9 @@ report           supported / contradicted / unverifiable + justification (answer
 | Module | Stage | Needs DB | Needs LLM | Needs GPU |
 |---|---|---|---|---|
 | `contracts.py` | data objects passed between stages | no | no | no |
-| `llm.py` | per-role LLM config (draft / decompose / verify) | no | — | no |
+| `settings.py` | shape of `config.yaml`, validated at startup | no | no | no |
+| `factory.py` | builds each stage from `config.yaml` (one registry per stage) | no | no | no |
+| `llm.py` | LLM client for any OpenAI-compatible provider | no | — | no |
 | `components/embedding.py` | shared: embeds chunks, questions and claims | no | no | yes (CPU works) |
 | `components/store.py` | shared: pgvector setup, writing, search | yes | no | no |
 | `indexing/loading.py` | A: PDF / Markdown → Document | no | no | no |
@@ -50,8 +52,8 @@ system catch a claim that is true according to paper A but disputed by paper B.
 
 **3. The judge is a different model from the author.** If one model writes the answer and then
 checks it, its mistakes are correlated (whatever it misread while writing, it misreads the same
-way while checking), and it tends to approve its own output. `llm.py` resolves a model, base
-URL and key per role. By default the verifier is `llama-3.3-70b-versatile` (Meta), while the
+way while checking), and it tends to approve its own output. `config.yaml` sets a provider
+and a model per stage (`answering.verifier.judge` for the verifier). By default the verifier is `llama-3.3-70b-versatile` (Meta), while the
 drafter is `gpt-oss-120b` (OpenAI). Both run on Groq, so one key is enough, and each model has
 its own rate-limit quota.
 

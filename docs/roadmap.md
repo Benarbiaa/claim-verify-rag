@@ -6,9 +6,11 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## Done
 
-- [x] **Per-role LLM config** (`src/claimverify/llm.py`): draft and decompose on
+- [x] **Modular pipeline**: data contracts (`contracts.py`), one interface per stage, and
+  `config.yaml` + `factory.py` to choose each implementation. Secrets stay in `.env`.
+- [x] **Per-role LLM config** (now in `config.yaml`): draft and decompose on
   `gpt-oss-120b`, verify on `llama-3.3-70b-versatile`. Every role can be moved to another
-  OpenAI-compatible provider or a local model from `.env`. The `verifier_model` is recorded in
+  OpenAI-compatible provider or a local model from `config.yaml`. The `verifier_model` is recorded in
   every verdict and in the report header.
 
 ## P0: correctness (fix one at a time, re-run `make check` after each)
@@ -39,10 +41,9 @@ them before building the eval baseline**, or the numbers you report will be skew
   `data/corpus/SOURCES.md`.
 
 - [ ] **P0-5. Housekeeping.** `requirements.txt` pins unused packages (anthropic, google-*,
-  Spark, …); regenerate it from the direct dependencies in `pyproject.toml`. `TOP_K_PER_DOC`
-  is duplicated across 3 modules (`components/store.py`, `answering/drafting.py`,
-  `answering/verification.py`); move it into one `config.py`. (The unused `tqdm` import went
-  away when `ingest.py` was split.)
+  Spark, …); regenerate it from the direct dependencies in `pyproject.toml`. (Done along the
+  way: `top_k_per_doc` now comes from `config.yaml`, and the unused `tqdm` import went away
+  when `ingest.py` was split.)
 
 ## P1: Step F, evaluation (the part recruiters will look at)
 

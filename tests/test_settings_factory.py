@@ -17,9 +17,16 @@ from claimverify.components.embedding import BgeEmbedder
 from claimverify.factory import build_answering, build_indexing
 from claimverify.indexing.chunking import FixedSizeChunker
 from claimverify.indexing.loading import FileLoader
-from claimverify.settings import Settings, load_settings
+from claimverify.settings import LEGACY_ENV_VARS, Settings, load_settings
 
 CONFIG = Path(__file__).parent.parent / "config.yaml"
+
+
+@pytest.fixture(autouse=True)
+def no_legacy_env(monkeypatch):
+    # Tests must not depend on the developer's .env.
+    for name in LEGACY_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
 
 
 def raw_config() -> dict:
@@ -114,3 +121,25 @@ def test_a_missing_api_key_names_the_env_variable(settings, monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY")
     with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
         build_answering(settings, conn=None)
+
+
+def test_the_judge_uses_a_different_model_from_the_drafter():
+    # The core idea of the project: the judge must not grade its own work.
+    a = load_settings(CONFIG).answering
+    assert a.verifier.judge.model != a.drafter.model
+
+
+def test_each_provider_only_receives_its_own_key(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    cfg = load_settings(CONFIG).model_dump()
+    cfg["answering"]["verifier"]["judge"].update(provider="gemini", model="gemini-3.5-flash")
+    stages = build_answering(Settings.model_validate(cfg), conn=None)
+    assert stages.drafter.llm.client.api_key == "groq-key"
+    assert stages.verifier.judge.llm.client.api_key == "gemini-key"
+
+
+def test_legacy_model_variables_trigger_a_warning(monkeypatch):
+    monkeypatch.setenv("VERIFY_MODEL", "some-model")
+    with pytest.warns(UserWarning, match="VERIFY_MODEL"):
+        load_settings(CONFIG)

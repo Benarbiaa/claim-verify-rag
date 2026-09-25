@@ -4,17 +4,8 @@ Génération de réponse brouillon — Étape B
 
 Boucle : question -> retrieval PAR DOCUMENT (chaque source du corpus a une
 chance d'être représentée, voir components/store.py) -> génération d'une
-réponse via le LLM du rôle "draft" (voir llm.py), en citant les sources utilisées.
-
-Pas encore de décomposition en claims ni de vérification à ce stade — on
-valide seulement que la boucle "question -> réponse ancrée dans le corpus"
-fonctionne, avant d'ajouter la couche agentique par-dessus.
-
-Prérequis :
-    pip install openai python-dotenv
-
-    Variable dans le fichier .env :
-    GROQ_API_KEY=...        (+ DRAFT_MODEL / DRAFT_BASE_URL optionnels, voir llm.py)
+réponse par le drafter (answering.drafter dans config.yaml), en citant les
+sources utilisées. La clé API du fournisseur choisi se met dans .env.
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.answering.drafting \
@@ -30,13 +21,10 @@ from typing import Protocol, runtime_checkable
 import psycopg2
 
 from claimverify.answering.retrieval import format_evidence
-from claimverify.components.embedding import embed_query, load_embedding_model
-from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import Draft, Passage
-from claimverify.llm import LLM, get_llm  # modèle du rôle "draft", voir llm.py
-
-TOP_K_PER_DOC = 2  # top-k PAR document, pas top-k global — voir components/store.py
+from claimverify.llm import LLM
+from claimverify.settings import add_config_argument, load_settings
 
 
 @runtime_checkable
@@ -89,23 +77,25 @@ Question: {query}
 
 
 def main():
+    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    from claimverify.factory import build_drafter, build_embedder, build_retriever
+
     parser = argparse.ArgumentParser()
     add_db_url_argument(parser)
+    add_config_argument(parser)
     parser.add_argument("--query", type=str, required=True)
-    parser.add_argument("--top_k_per_doc", type=int, default=TOP_K_PER_DOC)
     parser.add_argument("--save_to", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder le brouillon en JSON "
                               "(entrée de decomposition --draft_file).")
     args = parser.parse_args()
 
-    llm = get_llm("draft")
-
-    print("Chargement du modèle d'embedding...")
-    embed_model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
+    settings = load_settings(args.config)
+    drafter = build_drafter(settings)
 
     conn = psycopg2.connect(args.db_url)
-    query_embedding = embed_query(embed_model, args.query)
-    passages = search_per_document(conn, query_embedding, args.top_k_per_doc)
+    retriever = build_retriever(settings.answering.retriever, build_embedder(settings), conn,
+                                "answering.retriever")
+    passages = retriever.retrieve(args.query)
     conn.close()
 
     docs_covered = sorted({p.filename for p in passages})
@@ -113,8 +103,8 @@ def main():
     for doc in docs_covered:
         print(f"  - {doc}")
 
-    print(f"\nGénération de la réponse brouillon ({llm.describe()})...\n")
-    draft = generate_draft_answer(llm, args.query, passages)
+    print(f"\nGénération de la réponse brouillon ({settings.answering.drafter.model})...\n")
+    draft = drafter.draft(args.query, passages)
 
     print("=" * 100)
     print(f"QUESTION : {args.query}")

@@ -18,8 +18,7 @@ cette étape, avec un message clair, au lieu de faire planter la vérification.
 
 Usage (en important la fonction depuis un autre script) :
     from claimverify.answering.decomposition import decompose_into_claims
-    from claimverify.llm import get_llm
-    claims = decompose_into_claims(get_llm("decompose"), draft)
+    claims = decompose_into_claims(llm, draft)   # llm : voir factory.build_llm
 
 Usage (en standalone, sur un brouillon sauvegardé par drafting --save_to) :
     python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
@@ -32,7 +31,8 @@ from typing import Protocol, runtime_checkable
 from pydantic import ValidationError
 
 from claimverify.contracts import Claim, Draft
-from claimverify.llm import LLM, get_llm  # modèle du rôle "decompose", voir llm.py
+from claimverify.llm import LLM
+from claimverify.settings import add_config_argument, load_settings
 
 
 @runtime_checkable
@@ -121,7 +121,11 @@ def print_claims(claims: list[Claim]):
 
 
 def main():
+    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    from claimverify.factory import build_decomposer
+
     parser = argparse.ArgumentParser()
+    add_config_argument(parser)
     parser.add_argument("--draft_file", type=str, required=True,
                          help="Brouillon en JSON (sortie de drafting --save_to).")
     parser.add_argument("--save_json", type=str, default=None,
@@ -129,13 +133,14 @@ def main():
                               "(à utiliser ensuite comme entrée de verification.py).")
     args = parser.parse_args()
 
-    llm = get_llm("decompose")
+    settings = load_settings(args.config)
+    decomposer = build_decomposer(settings)
 
     with open(args.draft_file, "r", encoding="utf-8") as f:
         draft = Draft.model_validate_json(f.read())
 
-    print(f"Décomposition en claims atomiques ({llm.describe()})...")
-    claims = decompose_into_claims(llm, draft)
+    print(f"Décomposition en claims atomiques ({settings.answering.decomposer.model})...")
+    claims = decomposer.decompose(draft)
     print_claims(claims)
 
     if args.save_json:

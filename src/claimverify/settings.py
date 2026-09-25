@@ -14,13 +14,22 @@ Pour ajouter une implémentation (ex. un juge "nli") : ajouter son modèle de
 réglages ici, et une ligne dans le registre de factory.py.
 """
 
+import argparse
+import os
+import warnings
 from pathlib import Path
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
+import claimverify.config  # noqa: F401  (charge le .env avant de le lire ci-dessous)
+
 DEFAULT_CONFIG_PATH = Path("config.yaml")
+
+# Anciennes variables de .env (config par rôle) : remplacées par config.yaml.
+LEGACY_ENV_VARS = [f"{role}_{key}" for role in ("DRAFT", "DECOMPOSE", "VERIFY", "LLM")
+                   for key in ("MODEL", "BASE_URL", "API_KEY")]
 
 
 class _Strict(BaseModel):
@@ -96,5 +105,15 @@ class Settings(_Strict):
 
 
 def load_settings(path: Path = DEFAULT_CONFIG_PATH) -> Settings:
+    legacy = [name for name in LEGACY_ENV_VARS if os.getenv(name)]
+    if legacy:
+        warnings.warn(f"Variables ignorées (les modèles se choisissent dans {path}) : "
+                      f"{', '.join(legacy)}. Les retirer de .env.", stacklevel=2)
     with open(path, encoding="utf-8") as f:
         return Settings.model_validate(yaml.safe_load(f))
+
+
+def add_config_argument(parser: argparse.ArgumentParser) -> None:
+    """Ajoute --config (défaut : config.yaml) à un script."""
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH,
+                        help="Fichier de configuration du pipeline (défaut : config.yaml).")

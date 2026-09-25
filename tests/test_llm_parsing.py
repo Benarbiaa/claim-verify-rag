@@ -5,7 +5,7 @@ import json
 import pytest
 
 from claimverify.answering.decomposition import decompose_into_claims
-from claimverify.answering.verification import should_continue, verdict_node
+from claimverify.answering.verification import judge_with_llm, should_continue
 from claimverify.contracts import Claim, Draft
 from fakes import fake_llm
 
@@ -34,47 +34,36 @@ def test_decompose_rejects_a_malformed_claim_at_the_boundary():
         decompose_into_claims(fake_llm('{"claims": [{"id": "c1", "text": "X"}]}'), DRAFT)
 
 
-def _state(llm, claims=None, index=0):
-    return {
-        "claims": claims or [Claim(id="c1", claim="X", cited_source="a.pdf")],
-        "current_index": index,
-        "verdicts": [],
-        "embed_model": None,
-        "db_conn": None,
-        "llm": llm,
-        "current_evidence": "[Source: a.pdf | chunk #0 | type: peer_reviewed_paper]\n...",
-    }
+CLAIM = Claim(id="c1", claim="X", cited_source="a.pdf")
+EVIDENCE = "[Source: a.pdf | chunk #0 | type: peer_reviewed_paper]\n..."
 
 
-def test_verdict_node_parses_verdict_and_advances():
+def test_judge_parses_the_verdict():
     verdict = {
         "verdict": "supported",
         "justification": "a.pdf says so",
         "supporting_sources": ["a.pdf"],
         "contradicting_sources": [],
     }
-    update = verdict_node(_state(fake_llm(json.dumps(verdict), model="judge-model")))
-    assert update["current_index"] == 1
-    entry = update["verdicts"][0]
+    entry = judge_with_llm(fake_llm(json.dumps(verdict), model="judge-model"), CLAIM, EVIDENCE)
     assert entry.verdict == "supported"
     assert entry.original_cited_source == "a.pdf"
     assert entry.verifier == "llm_judge:judge-model"
 
 
-def test_verdict_node_falls_back_to_unverifiable_on_bad_json():
-    update = verdict_node(_state(fake_llm("oops")))
-    assert update["verdicts"][0].verdict == "unverifiable"
+def test_judge_falls_back_to_unverifiable_on_bad_json():
+    assert judge_with_llm(fake_llm("oops"), CLAIM, EVIDENCE).verdict == "unverifiable"
 
 
-def test_verdict_node_falls_back_to_unverifiable_on_unknown_label():
-    update = verdict_node(_state(fake_llm('{"verdict": "probably", "justification": "?"}')))
-    assert update["verdicts"][0].verdict == "unverifiable"
+def test_judge_falls_back_to_unverifiable_on_unknown_label():
+    raw = '{"verdict": "probably", "justification": "?"}'
+    assert judge_with_llm(fake_llm(raw), CLAIM, EVIDENCE).verdict == "unverifiable"
 
 
 def test_should_continue_loops_until_claims_exhausted():
-    claims = [Claim(id="c1", claim="a"), Claim(id="c2", claim="b")]
-    assert should_continue(_state(None, claims, index=1)) == "retrieve"
-    assert should_continue(_state(None, claims, index=2)) == "end"
+    state = {"claims": [Claim(id="c1", claim="a"), Claim(id="c2", claim="b")], "current_index": 1}
+    assert should_continue(state) == "retrieve"
+    assert should_continue({**state, "current_index": 2}) == "end"
 
 
 def test_json_mode_is_requested_for_structured_steps():

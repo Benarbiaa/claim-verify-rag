@@ -6,15 +6,13 @@ Pour chaque claim atomique (sortie de l'étape C) :
     1. Retrieval CIBLÉ ET PAR DOCUMENT (pas de réutilisation du cited_source
        du claim — on ignore délibérément d'où le claim brouillon prétendait
        venir, et on recherche indépendamment dans TOUT le corpus).
-    2. Un appel LLM séparé — par défaut un modèle d'une AUTRE famille que
-       celui qui a rédigé la réponse (rôle "verify", voir llm.py) — juge : supporté / contredit / non vérifiable,
-       avec justification et citation des sources utilisées pour le verdict.
+    2. Un juge — par défaut un LLM d'une AUTRE famille que celui qui a rédigé
+       la réponse (answering.verifier.judge dans config.yaml) — rend un verdict :
+       supporté / contredit / non vérifiable, avec justification et sources.
 
-Orchestré avec LangGraph : un noeud retrieval -> un noeud verdict -> boucle
-sur la liste de claims jusqu'à épuisement.
-
-Prérequis :
-    pip install openai python-dotenv psycopg2-binary sentence-transformers langgraph
+Le Verifier reçoit son Retriever et son Judge (voir la section Interfaces) ;
+l'implémentation actuelle boucle avec LangGraph : retrieve -> judge -> claim
+suivant, jusqu'à épuisement.
 
 Usage :
     # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
@@ -31,16 +29,12 @@ from typing import Protocol, TypedDict, runtime_checkable
 import psycopg2
 from langgraph.graph import END, StateGraph
 from pydantic import ValidationError
-from sentence_transformers import SentenceTransformer
 
 from claimverify.answering.retrieval import Retriever, format_evidence
-from claimverify.components.embedding import embed_query, load_embedding_model
-from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Passage, Verdict
-from claimverify.llm import LLM, get_llm  # modèle du rôle "verify", voir llm.py
-
-TOP_K_PER_DOC = 2
+from claimverify.llm import LLM
+from claimverify.settings import add_config_argument, load_settings
 
 VERDICT_SYSTEM_PROMPT = """You are a rigorous claim verifier (fact-checker). You are given a claim
 and a set of source passages, potentially from MULTIPLE different documents. Your task: judge
@@ -71,19 +65,13 @@ Respond ONLY with a valid JSON object, no text before or after, in this format:
 """
 
 
-def debug_single_claim(claim_text: str, db_url: str):
+def debug_single_claim(claim_text: str, retriever: Retriever):
     """Affiche en détail (texte complet + scores) les chunks récupérés pour
     UN SEUL claim, sans appel LLM. Sert à diagnostiquer si un verdict
     "unverifiable" vient d'un problème de retrieval (le bon chunk n'a pas
     été récupéré) ou d'un problème de jugement LLM (le chunk était là mais
     mal évalué)."""
-    print("Chargement du modèle d'embedding...")
-    embed_model = load_embedding_model(device="cuda")
-
-    conn = psycopg2.connect(db_url)
-    query_embedding = embed_query(embed_model, claim_text)
-    passages = search_per_document(conn, query_embedding, top_k_per_doc=TOP_K_PER_DOC)
-    conn.close()
+    passages = retriever.retrieve(claim_text)
 
     print("=" * 100)
     print(f"CLAIM : {claim_text}")
@@ -97,33 +85,8 @@ def debug_single_claim(claim_text: str, db_url: str):
 
 
 # ---------------------------------------------------------------------------
-# État du graphe LangGraph
+# Jugement d'un claim par un LLM
 # ---------------------------------------------------------------------------
-
-class VerificationState(TypedDict):
-    claims: list[Claim]         # claims à vérifier (sortie de l'étape C)
-    current_index: int          # index du claim en cours de traitement
-    verdicts: list[Verdict]     # verdicts accumulés
-    # ressources partagées, injectées une fois au démarrage
-    embed_model: SentenceTransformer
-    db_conn: object
-    llm: LLM                     # modèle du rôle "verify"
-    current_evidence: str        # preuve récupérée pour le claim courant (état intermédiaire)
-
-
-# ---------------------------------------------------------------------------
-# Noeuds du graphe
-# ---------------------------------------------------------------------------
-
-def retrieve_node(state: VerificationState) -> dict:
-    claim = state["claims"][state["current_index"]]
-    query_embedding = embed_query(state["embed_model"], claim.claim)
-    passages = search_per_document(state["db_conn"], query_embedding)
-    evidence = format_evidence(passages)
-    print(f"  [{claim.id}] retrieval : {len(passages)} chunks récupérés depuis "
-          f"{len({p.filename for p in passages})} document(s)")
-    return {"current_evidence": evidence}
-
 
 def judge_with_llm(llm: LLM, claim: Claim, evidence: str) -> Verdict:
     """Demande un verdict au LLM pour un claim, à partir des passages déjà mis en forme."""
@@ -158,37 +121,6 @@ cited by the claim):
             verdict="unverifiable",
             justification=f"Erreur de parsing JSON du LLM. Réponse brute : {raw_text[:200]}",
         )
-
-
-def verdict_node(state: VerificationState) -> dict:
-    claim = state["claims"][state["current_index"]]
-    verdict = judge_with_llm(state["llm"], claim, state["current_evidence"])
-    print(f"  [{claim.id}] verdict : {verdict.verdict.upper()}")
-
-    return {
-        "verdicts": state["verdicts"] + [verdict],
-        "current_index": state["current_index"] + 1,
-    }
-
-
-def should_continue(state: VerificationState) -> str:
-    return "retrieve" if state["current_index"] < len(state["claims"]) else "end"
-
-
-# ---------------------------------------------------------------------------
-# Construction du graphe
-# ---------------------------------------------------------------------------
-
-def build_graph():
-    graph = StateGraph(VerificationState)
-    graph.add_node("retrieve", retrieve_node)
-    graph.add_node("verdict", verdict_node)
-
-    graph.set_entry_point("retrieve")
-    graph.add_edge("retrieve", "verdict")
-    graph.add_conditional_edges("verdict", should_continue, {"retrieve": "retrieve", "end": END})
-
-    return graph.compile()
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +159,10 @@ class VerifierState(TypedDict):
     current_index: int
     passages: list[Passage]      # passages du claim en cours
     verdicts: list[Verdict]
+
+
+def should_continue(state: VerifierState) -> str:
+    return "retrieve" if state["current_index"] < len(state["claims"]) else "end"
 
 
 class LangGraphVerifier:
@@ -293,10 +229,14 @@ def print_summary(verdicts: list[Verdict]):
 
 
 def main():
+    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    from claimverify.factory import build_embedder, build_retriever, build_verifier
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--claims_file", type=str, default=None,
                          help="Fichier JSON contenant les claims (sortie de decomposition.py).")
     add_db_url_argument(parser)
+    add_config_argument(parser)
     parser.add_argument("--save_json", type=str, default=None,
                          help="Chemin optionnel pour sauvegarder les verdicts en JSON.")
     parser.add_argument("--debug_claim", type=str, default=None,
@@ -304,47 +244,34 @@ def main():
                               "claim (sans appel LLM), au lieu de lancer la vérification complète.")
     args = parser.parse_args()
 
+    settings = load_settings(args.config)
+    conn = psycopg2.connect(args.db_url)
+
     if args.debug_claim:
-        debug_single_claim(args.debug_claim, args.db_url)
+        retriever = build_retriever(settings.answering.verifier.retriever, build_embedder(settings),
+                                    conn, "answering.verifier.retriever")
+        debug_single_claim(args.debug_claim, retriever)
+        conn.close()
         return
 
     if not args.claims_file:
         raise RuntimeError("--claims_file est requis en dehors du mode --debug_claim.")
-
-    llm = get_llm("verify")
 
     with open(args.claims_file, "r", encoding="utf-8") as f:
         claims_data = json.load(f)
     raw_claims = claims_data["claims"] if "claims" in claims_data else claims_data
     claims = [Claim.model_validate(c) for c in raw_claims]
 
-    print("Chargement du modèle d'embedding...")
-    embed_model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
-
-    conn = psycopg2.connect(args.db_url)
-
-    graph = build_graph()
-
-    print(f"\nVérification de {len(claims)} claims ({llm.describe()})...\n")
-    initial_state: VerificationState = {
-        "claims": claims,
-        "current_index": 0,
-        "verdicts": [],
-        "embed_model": embed_model,
-        "db_conn": conn,
-        "llm": llm,
-        "current_evidence": "",
-    }
-
-    final_state = graph.invoke(initial_state)
+    verifier = build_verifier(settings, build_embedder(settings), conn)
+    print(f"\nVérification de {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")
+    verdicts = verifier.verify(claims)
     conn.close()
 
-    print_summary(final_state["verdicts"])
+    print_summary(verdicts)
 
     if args.save_json:
         with open(args.save_json, "w", encoding="utf-8") as f:
-            json.dump([v.model_dump() for v in final_state["verdicts"]], f,
-                      ensure_ascii=False, indent=2)
+            json.dump([v.model_dump() for v in verdicts], f, ensure_ascii=False, indent=2)
         print(f"Verdicts sauvegardés dans {args.save_json}")
 
 

@@ -52,30 +52,15 @@ class BgeEmbedder:
         return embed_query(self.model, text)
 
 
-def load_embedding_model(device: str = "cuda") -> SentenceTransformer:
-    return SentenceTransformer(EMBEDDING_MODEL, device=device)
-
-
 def embed_query(model: SentenceTransformer, text: str):
     instructed = f"Represent this sentence for searching relevant passages: {text}"
     return model.encode(instructed, normalize_embeddings=True).tolist()
 
 
-def embed_chunks(chunks: list[Chunk], model_name: str = EMBEDDING_MODEL) -> list[Chunk]:
+def embed_chunks(chunks: list[Chunk], embedder: Embedder) -> list[Chunk]:
     """Retourne de NOUVEAUX chunks avec leur embedding : la liste reçue n'est pas modifiée."""
-    model = SentenceTransformer(model_name, device="cuda")  # passe à "cpu" si pas de GPU dispo
-    texts = [c.text for c in chunks]
-
-    # bge recommande un préfixe pour les documents (pas pour les queries) —
-    # cf. la doc du modèle sur Hugging Face pour bge-base-en-v1.5.
-    embeddings = model.encode(
-        texts,
-        batch_size=32,
-        show_progress_bar=True,
-        normalize_embeddings=True,  # cosine similarity <-> produit scalaire
-    )
-
+    embeddings = embedder.embed_texts([c.text for c in chunks])
     return [
-        chunk.model_copy(update={"embedding": emb.tolist()})
-        for chunk, emb in zip(chunks, embeddings)
+        chunk.model_copy(update={"embedding": embedding})
+        for chunk, embedding in zip(chunks, embeddings)
     ]

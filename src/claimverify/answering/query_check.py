@@ -16,9 +16,10 @@ import argparse
 
 import psycopg2
 
-from claimverify.components.embedding import embed_query, load_embedding_model
 from claimverify.components.store import search_global, search_per_document
 from claimverify.config import add_db_url_argument
+from claimverify.factory import build_embedder
+from claimverify.settings import add_config_argument, load_settings
 
 TOP_K = 5
 
@@ -48,6 +49,7 @@ def print_results(query: str, results):
 def main():
     parser = argparse.ArgumentParser()
     add_db_url_argument(parser)
+    add_config_argument(parser)
     parser.add_argument("--query", type=str, default=None,
                          help="Si fourni, exécute uniquement cette question au lieu du jeu par défaut.")
     parser.add_argument("--top_k", type=int, default=TOP_K)
@@ -58,14 +60,13 @@ def main():
     parser.add_argument("--top_k_per_doc", type=int, default=3)
     args = parser.parse_args()
 
-    print("Chargement du modèle d'embedding...")
-    model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
+    embedder = build_embedder(load_settings(args.config))
 
     conn = psycopg2.connect(args.db_url)
 
     queries = [args.query] if args.query else DEFAULT_TEST_QUERIES
     for query in queries:
-        query_embedding = embed_query(model, query)
+        query_embedding = embedder.embed_query(query)
         if args.per_document:
             results = search_per_document(conn, query_embedding, args.top_k_per_doc)
         else:

@@ -22,7 +22,7 @@ question ─► per-document retrieval ─► grounded draft ─► atomic claim
 ```
 
 **Stack:** PostgreSQL + pgvector · `BAAI/bge-base-en-v1.5` (local embeddings) · LangGraph ·
-any OpenAI-compatible LLM, configured **per role**:
+any OpenAI-compatible LLM. Every stage is chosen and tuned in [`config.yaml`](config.yaml):
 
 | Role | Default model (Groq) | Why |
 |---|---|---|
@@ -30,8 +30,11 @@ any OpenAI-compatible LLM, configured **per role**:
 | Claim decomposition | `openai/gpt-oss-120b` | Text transformation |
 | **Verification** | `llama-3.3-70b-versatile` | A **different model family** from the drafter, so the judge doesn't grade its own work |
 
-Each role can be moved to another provider or a local model (Ollama, vLLM) from `.env`. See
-[`.env.example`](.env.example).
+Each stage sits behind an interface, and `config.yaml` picks its implementation and settings:
+moving the judge to another provider (Gemini, a local model with Ollama or vLLM…) is a change
+to that file, not to the code. `.env` only holds secrets (API keys, `DB_URL`), see
+[`.env.example`](.env.example). For an experiment, copy `config.yaml` and pass
+`--config my_experiment.yaml` to any command.
 
 Design rationale: [`docs/architecture.md`](docs/architecture.md).
 
@@ -54,7 +57,8 @@ Full titles: [`data/corpus/SOURCES.md`](data/corpus/SOURCES.md).
 ```
 ├── src/claimverify/            # the package
 │   ├── contracts.py            #   data objects passed between stages
-│   ├── config.py, llm.py       #   .env loading, per-role LLM config
+│   ├── settings.py, factory.py #   config.yaml validation, builds the stages from it
+│   ├── config.py, llm.py       #   .env loading (secrets), LLM client
 │   ├── components/             #   shared by both pipelines
 │   │   ├── embedding.py        #     bge model: embeds chunks, questions and claims
 │   │   └── store.py            #     pgvector: table setup, writing, searching
@@ -87,7 +91,7 @@ pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip 
 # 2. database: Postgres + pgvector
 make db-up                         # or use your own Postgres with: CREATE EXTENSION vector;
 
-# 3. API key
+# 3. API key (models and settings are in config.yaml)
 cp .env.example .env               # then set GROQ_API_KEY (the only required key);
                                    # DB_URL already matches docker-compose.yml
 
@@ -116,8 +120,8 @@ python -m claimverify.answering.verification --claims_file claims.json --save_js
 python -m claimverify.answering.verification --debug_claim "..."   # inspect one claim's evidence
 ```
 
-Every script reads the database URL from `DB_URL` in `.env`. Pass `--db_url` to point one run at
-another database.
+Every script reads the database URL from `DB_URL` in `.env` and the pipeline settings from
+`config.yaml`. Pass `--db_url` or `--config` to point one run elsewhere.
 
 ## Status
 
@@ -127,7 +131,8 @@ another database.
 - [x] Atomic claim decomposition
 - [x] Per-claim independent verification (LangGraph)
 - [x] End-to-end runner with timings and saved reports
-- [x] Per-role LLM config: the verifier uses a different model than the drafter
+- [x] Modular pipeline: data contracts, one interface per stage, stages built from `config.yaml`
+- [x] The verifier uses a different model family than the drafter
 - [ ] Retrieval correctness fixes (index, token-aware chunking)
 - [ ] **Step F:** formal evaluation (claim-level gold set + end-to-end questions)
 - [ ] **Step G:** minimal UI

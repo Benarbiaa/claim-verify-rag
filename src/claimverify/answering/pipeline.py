@@ -7,20 +7,18 @@ Exécute la boucle complète pour une (ou plusieurs) question(s) :
              -> décomposition en claims (C)
              -> vérification de chaque claim (D)
 
-Charge le modèle d'embedding, la connexion DB, et les LLM (un par rôle) UNE SEULE
-FOIS (plutôt que 3x en lançant chaque script séparément), et enchaîne
-directement en mémoire — plus besoin de copier-coller des fichiers .txt/.json
-entre les étapes.
+Les étapes sont construites UNE SEULE FOIS à partir de config.yaml (voir
+factory.py), puis enchaînées en mémoire via leurs interfaces : ce fichier ne
+sait pas quel modèle, quelle base ou quelle bibliothèque chaque étape utilise.
 
 Produit un rapport horodaté (JSON + Markdown) dans reports/, avec :
     - la réponse brouillon, les claims, les verdicts
     - le temps de chaque étape (utile pour du benchmarking modèle/paramètres)
     - un résumé agrégé si plusieurs questions sont passées en une fois
+    - la configuration complète utilisée (pour reproduire le run)
 
-Prérequis :
-    pip install openai python-dotenv psycopg2-binary sentence-transformers langgraph
-
---db_url est facultatif si DB_URL est dans .env (voir config.py).
+--db_url est facultatif si DB_URL est dans .env (voir config.py), et
+--config vaut config.yaml par défaut.
 
 Usage (une question) :
     python -m claimverify.answering.pipeline \
@@ -40,61 +38,39 @@ from pathlib import Path
 
 import psycopg2
 
-from claimverify.answering.decomposition import decompose_into_claims
-from claimverify.answering.drafting import (
-    TOP_K_PER_DOC as DRAFT_TOP_K_PER_DOC,
-)
-from claimverify.answering.drafting import (
-    generate_draft_answer,
-)
-from claimverify.answering.verification import TOP_K_PER_DOC as VERIFY_TOP_K_PER_DOC
-from claimverify.answering.verification import build_graph
-from claimverify.components.embedding import embed_query, load_embedding_model
-from claimverify.components.store import search_per_document
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
-from claimverify.llm import LLM, ROLES, get_llm
+from claimverify.factory import AnsweringStages, build_answering
+from claimverify.settings import LLMStageSettings, Settings, add_config_argument, load_settings
 
 # Rapports écrits dans ./reports relatif au répertoire courant (racine du repo
 # quand on passe par le Makefile).
 REPORTS_DIR = Path.cwd() / "reports"
 
 
-def run_single_question(query: str, embed_model, conn, llms: dict[str, LLM],
-                         draft_top_k: int, verify_graph) -> dict:
+def run_single_question(query: str, stages: AnsweringStages) -> dict:
     """Exécute B -> C -> D pour une seule question et retourne un dict complet
     (réponse, claims, verdicts, timings) pour le rapport."""
     timings = {}
     t0 = time.perf_counter()
 
     # --- Étape B : réponse brouillon ---
-    query_embedding = embed_query(embed_model, query)
-    passages = search_per_document(conn, query_embedding, draft_top_k)
+    passages = stages.retriever.retrieve(query)
     docs_covered = sorted({p.filename for p in passages})
 
     t1 = time.perf_counter()
-    draft = generate_draft_answer(llms["draft"], query, passages)
+    draft = stages.drafter.draft(query, passages)
     t2 = time.perf_counter()
     timings["retrieval_draft_seconds"] = round(t1 - t0, 2)
     timings["generation_draft_seconds"] = round(t2 - t1, 2)
 
     # --- Étape C : décomposition en claims ---
-    claims = decompose_into_claims(llms["decompose"], draft)
+    claims = stages.decomposer.decompose(draft)
     t3 = time.perf_counter()
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
     # --- Étape D : vérification de chaque claim ---
-    initial_state = {
-        "claims": claims,
-        "current_index": 0,
-        "verdicts": [],
-        "embed_model": embed_model,
-        "db_conn": conn,
-        "llm": llms["verify"],
-        "current_evidence": "",
-    }
-    final_state = verify_graph.invoke(initial_state)
-    verdicts = final_state["verdicts"]
+    verdicts = stages.verifier.verify(claims)
     t4 = time.perf_counter()
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)
@@ -190,40 +166,44 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
     return "\n".join(lines)
 
 
+def describe_llm_stage(settings: Settings, stage: LLMStageSettings) -> str:
+    return f"{stage.model} @ {settings.providers[stage.provider].base_url}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     add_db_url_argument(parser)
+    add_config_argument(parser)
     parser.add_argument("--query", type=str, default=None,
                          help="Une seule question à traiter.")
     parser.add_argument("--questions_file", type=str, default=None,
                          help="Fichier texte avec une question par ligne, pour traiter "
                               "plusieurs questions en un seul run (benchmarking).")
-    parser.add_argument("--draft_top_k_per_doc", type=int, default=DRAFT_TOP_K_PER_DOC)
     args = parser.parse_args()
 
     if not args.query and not args.questions_file:
         raise RuntimeError("Fournir soit --query, soit --questions_file.")
 
-    # Un LLM par rôle (voir llm.py). Échoue ici, avant de charger quoi que ce
-    # soit, si une clé API manque.
-    llms = {role: get_llm(role) for role in ROLES}
-    for role, llm in llms.items():
-        print(f"LLM {role:<9}: {llm.describe()}")
+    settings = load_settings(args.config)
+    a = settings.answering
+    models = {
+        "draft": describe_llm_stage(settings, a.drafter),
+        "decompose": describe_llm_stage(settings, a.decomposer),
+        "verify": describe_llm_stage(settings, a.verifier.judge),
+    }
+    for role, desc in models.items():
+        print(f"LLM {role:<9}: {desc}")
 
     questions = load_questions(args)
 
-    print("Chargement du modèle d'embedding...")
-    embed_model = load_embedding_model(device="cuda")  # "cpu" si pas de GPU
-
+    # Échoue ici, avant tout calcul, si une clé API manque.
     conn = psycopg2.connect(args.db_url)
-    verify_graph = build_graph()
+    stages = build_answering(settings, conn)
 
     run_results = []
     for i, question in enumerate(questions, 1):
         print(f"\n[{i}/{len(questions)}] {question}")
-        result = run_single_question(
-            question, embed_model, conn, llms, args.draft_top_k_per_doc, verify_graph
-        )
+        result = run_single_question(question, stages)
         print(f"  -> {result['verdict_counts']} in {result['timings']['total_seconds']}s")
         run_results.append(result)
 
@@ -233,10 +213,12 @@ def main():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     run_metadata = {
         "timestamp": timestamp,
-        "models": {role: llm.describe() for role, llm in llms.items()},
-        "embedding_model": "BAAI/bge-base-en-v1.5",
-        "draft_top_k_per_doc": args.draft_top_k_per_doc,
-        "verify_top_k_per_doc": VERIFY_TOP_K_PER_DOC,
+        "config_file": str(args.config),
+        "models": models,
+        "embedding_model": settings.embedding.model,
+        "draft_top_k_per_doc": a.retriever.top_k_per_doc,
+        "verify_top_k_per_doc": a.verifier.retriever.top_k_per_doc,
+        "config": settings.model_dump(),  # tout config.yaml, pour reproduire le run
     }
 
     json_path = REPORTS_DIR / f"report_{timestamp}.json"
