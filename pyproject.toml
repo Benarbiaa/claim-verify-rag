@@ -23,7 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+# the web UI's server (src/claimverify/api); the UI itself is built from ui/ with npm
+ui = ["fastapi", "uvicorn[standard]"]
+dev = ["pytest", "ruff", "fastapi", "uvicorn[standard]"]
 
 [project.scripts]
 claimverify-ingest = "claimverify.indexing.ingest:main"
@@ -32,6 +34,7 @@ claimverify-draft = "claimverify.answering.drafting:main"
 claimverify-decompose = "claimverify.answering.decomposition:main"
 claimverify-verify = "claimverify.answering.verification:main"
 claimverify-run = "claimverify.answering.pipeline:main"
+claimverify-ui = "claimverify.api.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
