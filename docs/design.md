@@ -390,6 +390,7 @@ runs/
 └── 20260926_150302_answering/
     ├── events.jsonl          run_started · question_started · passages_retrieved · draft_written ·
     │                         claims_extracted · claim_verified × N · question_finished · run_finished
+    │                         (+ llm_waiting whenever an LLM call waits before a retry)
     ├── report.json           results + metadata (models, config used, usage per role)
     └── report.md             the same, readable
 ```
@@ -400,6 +401,7 @@ runs/
 | **Written immediately, one line per event** | `events.jsonl` is readable during the run and survives a crash |
 | **Chunk texts saved, not vectors or full documents** | vectors are in the database, documents in `data/corpus/` |
 | **`load_events()` rebuilds identical objects** | events have a `type` field; a saved run reads back as Pydantic objects |
+| **`llm_waiting` is emitted during a stage** | a 30 s rate-limit wait would otherwise look like a frozen run; `LLM.chat` tells the shared meter before sleeping, and the orchestrator turns it into an event |
 | **Files now, database later** | files need no setup; a PostgreSQL sink can be added when runs must be queried |
 
 Terminal output (answering):

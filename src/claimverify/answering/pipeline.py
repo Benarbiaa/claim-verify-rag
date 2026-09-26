@@ -43,6 +43,7 @@ from claimverify.events import (
     ClaimsExtracted,
     ClaimVerified,
     DraftWritten,
+    LLMWaiting,
     PassagesRetrieved,
     QuestionFinished,
     QuestionStarted,
@@ -62,6 +63,10 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     timings = {}
     t0 = time.perf_counter()
     stages.meter.take()  # l'usage de chaque étape se compte à partir d'ici
+    # chaque attente avant une nouvelle tentative devient un événement, émis tout de suite
+    stages.meter.on_wait = lambda w: run.emit(
+        LLMWaiting, question_index=question_index, role=w.role, model=w.model,
+        seconds=w.seconds, attempt=w.attempt, reason=w.reason)
     run.emit(QuestionStarted, question_index=question_index, question=query)
 
     # --- Étape B : réponse brouillon ---

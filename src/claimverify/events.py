@@ -135,6 +135,19 @@ class ClaimVerified(Event):
     usage: Usage = Usage()
 
 
+class LLMWaiting(Event):
+    """Un appel LLM attend avant une nouvelle tentative (ex. limite par minute).
+    Émis PENDANT une étape, contrairement aux autres : une interface peut
+    afficher le compte à rebours au lieu de sembler figée."""
+    type: Literal["llm_waiting"] = "llm_waiting"
+    question_index: int | None = None
+    role: str          # draft, decompose, verify
+    model: str
+    seconds: float     # attente annoncée
+    attempt: int       # la tentative qui vient d'échouer
+    reason: str        # rate_limit, server_error, connection
+
+
 class QuestionFinished(Event):
     type: Literal["question_finished"] = "question_finished"
     question_index: int
@@ -146,6 +159,6 @@ AnyEvent = Annotated[
     RunStarted | RunFinished
     | DocumentsLoaded | ChunksBuilt | ChunksEmbedded | ChunksStored
     | QuestionStarted | PassagesRetrieved | DraftWritten | ClaimsExtracted | ClaimVerified
-    | QuestionFinished,
+    | LLMWaiting | QuestionFinished,
     Field(discriminator="type"),
 ]

@@ -8,7 +8,7 @@ from claimverify.answering.drafting import LLMDrafter
 from claimverify.answering.pipeline import run_single_question
 from claimverify.answering.verification import LangGraphVerifier, LLMJudge
 from claimverify.contracts import Chunk, Document
-from claimverify.events import ClaimVerified, DraftWritten
+from claimverify.events import ClaimVerified, DraftWritten, LLMWaiting
 from claimverify.factory import AnsweringStages, IndexingStages
 from claimverify.indexing import ingest
 from claimverify.reporting import ConsoleSink, RecorderSink, Run, load_events
@@ -124,3 +124,28 @@ def test_stage_events_carry_their_llm_usage(tmp_path):
     assert by_type["draft_written"][0].usage.calls == 1
     assert by_type["draft_written"][0].usage.tokens_in == 100
     assert [e.usage.calls for e in by_type["claim_verified"]] == [1, 1]  # one judge call each
+
+
+def test_a_wait_during_a_stage_is_emitted_before_the_stage_ends(tmp_path):
+    from claimverify.llm import WaitNotice
+
+    class WaitingDrafter:
+        """Announces a rate-limit wait through the shared meter, as LLM.chat does."""
+        def __init__(self, meter, drafter):
+            self.meter, self.drafter = meter, drafter
+
+        def draft(self, question, passages):
+            self.meter.on_wait(WaitNotice("draft", "m", 29.0, 1, "rate_limit"))
+            return self.drafter.draft(question, passages)
+
+    sink = ListSink()
+    stages = answering_stages()
+    stages.drafter = WaitingDrafter(stages.meter, stages.drafter)
+    run_single_question("Q?", stages, Run("answering", sinks=[sink], runs_dir=tmp_path), question_index=2)
+
+    types = [e.type for e in sink.events]
+    assert types.index("llm_waiting") == types.index("draft_written") - 1
+    wait = next(e for e in sink.events if isinstance(e, LLMWaiting))
+    assert (wait.question_index, wait.role, wait.seconds, wait.attempt, wait.reason) == (
+        2, "draft", 29.0, 1, "rate_limit")
+    assert ConsoleSink.describe(wait) == "[wait] draft: rate limit, retrying in 29s (attempt 2)"

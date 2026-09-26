@@ -124,3 +124,13 @@ def test_meter_reports_usage_since_the_last_take_and_totals_by_role():
     assert meter.take().calls == 0
     totals = meter.totals_by_role()
     assert (totals["draft"].calls, totals["verify"].calls) == (1, 2)
+
+
+def test_the_meter_is_told_about_each_wait_before_it_starts():
+    meter, notices = UsageMeter(), []
+    meter.on_wait = notices.append
+    llm, sleeps = llm_with(status_error(429, retry_after="7"), status_error(500), answer(), meter=meter)
+    llm.chat([])
+    assert [(n.role, n.seconds, n.attempt, n.reason) for n in notices] == [
+        ("verify", 7.0, 1, "rate_limit"), ("verify", 2, 2, "server_error")]
+    assert sleeps == [7.0, 2]

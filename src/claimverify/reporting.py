@@ -69,6 +69,9 @@ class ConsoleSink:
             note = _usage_note(event).removeprefix(", ")
             return (f"[verify {event.position}/{event.total}] {VERDICT_ICONS[v.verdict]} {v.verdict}: "
                     f"{v.claim}" + (f" ({note})" if note else ""))
+        if t == "llm_waiting":
+            return (f"[wait] {event.role}: {event.reason.replace('_', ' ')}, "
+                    f"retrying in {event.seconds:.0f}s (attempt {event.attempt + 1})")
         if t == "question_finished":
             counts = ", ".join(f"{n} {label}" for label, n in event.verdict_counts.items() if n)
             return f"[done] {counts} ({s})"

@@ -53,12 +53,27 @@ class CallRecord:
     seconds: float
 
 
+@dataclass(frozen=True)
+class WaitNotice:
+    """Une attente sur le point de commencer, avant une nouvelle tentative."""
+    role: str
+    model: str
+    seconds: float
+    attempt: int   # la tentative qui vient d'échouer (1 = le premier appel)
+    reason: str    # "rate_limit", "server_error" ou "connection"
+
+
 class UsageMeter:
-    """Enregistre chaque appel ; partagé par tous les LLM d'un pipeline (voir factory)."""
+    """Enregistre chaque appel ; partagé par tous les LLM d'un pipeline (voir factory).
+
+    on_wait, si défini, est prévenu avant chaque attente : une attente de 30 s
+    due à une limite par minute se voit pendant l'étape, pas seulement après.
+    """
 
     def __init__(self):
         self.records: list[CallRecord] = []
         self._cursor = 0
+        self.on_wait: Callable[[WaitNotice], None] | None = None
 
     def record(self, call: CallRecord) -> None:
         self.records.append(call)
@@ -136,9 +151,9 @@ class LLM:
                 if e.status_code != 429 and e.status_code < 500:
                     raise  # ex. 400 : pas une erreur temporaire
                 wait = _retry_after(e)
-                error = e
+                error, reason = e, "rate_limit" if e.status_code == 429 else "server_error"
             except openai.APIConnectionError as e:  # inclut les délais dépassés
-                wait, error = None, e
+                wait, error, reason = None, e, "connection"
             if wait is None:
                 wait = min(2 ** (attempts - 1), self.retry.max_wait_seconds)
             if attempts > self.retry.max_retries:
@@ -151,6 +166,8 @@ class LLM:
                     f"(> max_wait_seconds={self.retry.max_wait_seconds:.0f}), probablement une "
                     f"limite par jour. Réessayer plus tard ou changer de fournisseur."
                 ) from error
+            if self.meter.on_wait:
+                self.meter.on_wait(WaitNotice(self.role, self.model, wait, attempts, reason))
             self.sleep(wait)
             waited += wait
 
