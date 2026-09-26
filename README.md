@@ -63,6 +63,7 @@ Full titles: [`data/corpus/SOURCES.md`](data/corpus/SOURCES.md).
 │   ├── components/             #   shared by both pipelines
 │   │   ├── embedding.py        #     bge model: embeds chunks, questions and claims
 │   │   └── store.py            #     pgvector: table setup, writing, searching
+│   ├── api/                    #   the web UI's server: run folders, live runs (SSE)
 │   ├── indexing/               #   pipeline 1: files → database
 │   │   ├── loading.py          #     PDF / Markdown → Document
 │   │   ├── chunking.py         #     Document → Chunk
@@ -74,6 +75,7 @@ Full titles: [`data/corpus/SOURCES.md`](data/corpus/SOURCES.md).
 │       ├── verification.py     #     D: LangGraph verification loop
 │       ├── pipeline.py         #     B→C→D in one run + timed report
 │       └── query_check.py      #     retrieval sanity check (no LLM)
+├── ui/                     # web UI (React + TypeScript + Vite)
 ├── data/corpus/            # source documents
 ├── eval/                   # evaluation sets and protocol (Step F)
 ├── tests/                  # unit tests (no DB / GPU / API key needed)
@@ -129,6 +131,33 @@ folder, `runs/<run_id>/`: `events.jsonl` holds every stage's full output (retrie
 draft, claims, each verdict with the passages it was judged on), and answering runs add
 `report.json` and `report.md`. `claimverify.reporting.load_events` reads a run back.
 
+## Web UI
+
+The UI shows the pipeline at work: each stage, what it produced, and the verdicts. Its core is
+the plate, a grid of claims against source documents that shows which sources support,
+contradict, or say nothing about each claim. Recorded runs replay step by step (play, pause,
+speed) **without any API call**.
+
+```bash
+pip install -e ".[ui]"                     # FastAPI + uvicorn (already in [dev])
+cd ui && npm install && npm run build && cd ..
+python -m claimverify.api.server           # http://127.0.0.1:8000, opens on the latest run
+```
+
+| Option | Effect |
+|---|---|
+| `--no-live` | Replay only: the UI cannot start a run, so no API quota can be spent (safe for demos) |
+| `--fixtures` | Also lists `tests/fixtures/runs/`: a run with all five verdicts, including `contested` (labelled as a fixture in the UI) |
+
+"Ask a question" runs the real pipeline (about 50K tokens per question; the cost is shown before
+starting). The page follows each stage as it finishes, shows a countdown during rate-limit
+waits, and explains run-stopping errors (daily limit, request too large). The run is recorded in
+`runs/` like any other.
+
+To work on the UI: `python -m claimverify.api.server` in one terminal, `cd ui && npm run dev` in
+another (Vite forwards `/api` to the server). `cd ui && npm test` runs the UI's unit tests. The
+visual design is described in [`DESIGN.md`](DESIGN.md).
+
 ## Status
 
 - [x] Corpus selected and ingested
@@ -141,7 +170,7 @@ draft, claims, each verdict with the passages it was judged on), and answering r
 - [x] The verifier uses a different model family than the drafter
 - [ ] Retrieval correctness fixes (index, token-aware chunking)
 - [ ] **Step F:** formal evaluation (claim-level gold set + end-to-end questions)
-- [ ] **Step G:** minimal UI
+- [x] **Step G:** web UI (replay, live runs, indexing view)
 - [ ] Technical report
 
 Details and priorities: [`docs/roadmap.md`](docs/roadmap.md).

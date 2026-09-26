@@ -25,3 +25,4 @@ verdicts*.json
 
 # design tooling scratch files
 .impeccable/questions/
+.impeccable/review/

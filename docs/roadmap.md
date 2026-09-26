@@ -85,8 +85,9 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## P3: Step G interface and deliverables
 
-- [ ] Minimal UI (Streamlit or Gradio): question → draft with claims highlighted by verdict →
-  click a claim to see the evidence passages and the sources it was checked against.
+- [x] Web UI (FastAPI + React, `ui/`): replay of recorded runs, live runs streamed as events,
+  the claims × sources plate with each claim's evidence, one time axis with rate-limit waits,
+  indexing view. See the README's "Web UI" section and `DESIGN.md`.
 - [ ] README: add a demo GIF, an example report excerpt and the eval results table.
 - [ ] Technical report (rapport): problem, corpus rationale, architecture, eval method,
   results, ablations, limitations.

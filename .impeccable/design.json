@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-26T18:15:00Z",
+  "title": "Design System: claim-verify-rag UI",
+  "extensions": {
+    "colorMeta": {
+      "supported": { "role": "primary", "displayName": "Supported Blue", "canonical": "#0072b2", "tonalRamp": ["#00233a", "#003657", "#004a78", "#005a8c", "#0072b2", "#3a93c8", "#8cc0df", "#e3eff7"] },
+      "contradicted": { "role": "primary", "displayName": "Contradicted Vermillion", "canonical": "#d55e00", "tonalRamp": ["#3a1a00", "#5c2900", "#843b00", "#a84a00", "#d55e00", "#e5864a", "#f2b995", "#fbeadf"] },
+      "error": { "role": "secondary", "displayName": "Error Amber", "canonical": "#e69f00", "tonalRamp": ["#2e2000", "#4d3500", "#6b4a00", "#855b00", "#e69f00", "#f0bd4d", "#f6d894", "#fbf1d9"] },
+      "unverifiable": { "role": "secondary", "displayName": "Unverifiable Grey", "canonical": "#8a9099", "tonalRamp": ["#1f2226", "#33373d", "#454b53", "#545b64", "#8a9099", "#a9aeb5", "#cdd1d6", "#eceeeb"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#15181c", "tonalRamp": ["#15181c", "#2a2f35", "#454b53", "#636a73", "#8a9099", "#b9bec5", "#dcdfe2", "#f4f5f3"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#f4f5f3", "tonalRamp": ["#0f1216", "#161a1f", "#1d2228", "#2a3037", "#dcdfe2", "#eceeeb", "#f4f5f3", "#ffffff"] }
+    },
+    "shadows": {
+      "lift": "0 1px 2px rgb(21 24 28 / 0.06), 0 8px 24px -8px rgb(21 24 28 / 0.14)",
+      "lift-dark": "0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -10px rgb(0 0 0 / 0.6)"
+    },
+    "motion": {
+      "ease-out": "cubic-bezier(0.23, 1, 0.32, 1)",
+      "ease-in-out": "cubic-bezier(0.77, 0, 0.175, 1)",
+      "press": "transform 150ms ease-out, scale 0.97",
+      "panel-enter": "280ms ease-out, translateY 8px + blur 3px",
+      "verdict-land": "spring 0.4s bounce 0.25, from scale 0.6 + blur 3px",
+      "axis-flight": "clip-path linear over the cue's duration"
+    },
+    "breakpoints": { "sm": "640px", "lg": "1024px", "xl": "1280px", "sticky-min-height": "860px" },
+    "components": {
+      "button-primary": { "html": "<button class=\"btn\">▶ Play</button>", "css": ".btn{height:40px;padding:0 16px;border-radius:8px;background:#15181c;color:#fff;font:700 15px 'Atkinson Hyperlegible Next',sans-serif;border:0;box-shadow:0 1px 2px rgb(21 24 28/.06),0 8px 24px -8px rgb(21 24 28/.14)}" },
+      "plate-cell": { "html": "<span class=\"well\"><span class=\"dot\"></span></span>", "css": ".well{display:inline-flex;width:32px;height:32px;border-radius:9999px;box-shadow:inset 0 0 0 1px #dcdfe2;align-items:center;justify-content:center}.dot{width:13px;height:13px;border-radius:50%;background:#0072b2}" }
+    },
+    "narrative": {
+      "northStar": "The assay plate.",
+      "overview": "Each answer is treated like a lab sample: every claim is tested against every source, and the result reads like a lab test plate being filled in. Cool paper, ink, hairlines and figures in monospace; the verdicts are the only colour.",
+      "keyCharacteristics": [
+        "The plate (claims × sources) is the signature component",
+        "One time axis for the whole run, waits hatched to scale",
+        "Pending is hatched, not a spinner",
+        "Sources for a claim on the left, against on the right",
+        "Light theme for projectors, dark for laptops"
+      ],
+      "rules": [
+        "Colour belongs to verdicts only",
+        "Contested is the two colours together, split diagonally",
+        "Monospace only for measurements and identifiers",
+        "No small upper-case labels above headings"
+      ]
+    }
+  }
+}
