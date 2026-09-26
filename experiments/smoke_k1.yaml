@@ -1,0 +1,48 @@
+# Smoke test on the Groq free tier: identical to config.yaml, except the verifier
+# retrieves 1 chunk per document instead of 2, so each judge request stays under
+# Qwen's 7,000 input tokens per minute (chunks are ~800 tokens until chunking is fixed).
+#
+#   python -m claimverify.answering.pipeline --config experiments/smoke_k1.yaml --query "..."
+
+providers:                       # LLM endpoints; each names the .env variable holding its key
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+
+embedding:                       # shared by both pipelines: chunks and queries MUST use the same model
+  type: bge
+  model: BAAI/bge-base-en-v1.5
+  device: cuda
+
+indexing:
+  loader:
+    type: files
+  chunker:
+    type: fixed_size
+    chunk_size: 512
+    overlap_ratio: 0.15
+
+answering:
+  retriever:                     # used by the drafter
+    type: pgvector
+    top_k_per_doc: 2
+  drafter:
+    type: llm
+    provider: groq
+    model: openai/gpt-oss-120b
+  decomposer:
+    type: llm
+    provider: groq
+    model: openai/gpt-oss-120b
+  verifier:
+    type: langgraph
+    retriever:                   # its own retriever: can differ from the drafter's
+      type: pgvector
+      top_k_per_doc: 1           # CHANGED from 2 (see header)
+    judge:                       # a different model family from the drafter, on purpose
+      type: llm
+      provider: groq
+      model: qwen/qwen3.8-27b
