@@ -22,3 +22,6 @@ verdicts*.json
 .vscode/
 .idea/
 .DS_Store
+
+# design tooling scratch files
+.impeccable/questions/
