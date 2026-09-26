@@ -143,3 +143,10 @@ def test_legacy_model_variables_trigger_a_warning(monkeypatch):
     monkeypatch.setenv("VERIFY_MODEL", "some-model")
     with pytest.warns(UserWarning, match="VERIFY_MODEL"):
         load_settings(CONFIG)
+
+
+def test_llms_get_the_providers_retry_settings_and_one_shared_meter(settings):
+    stages = build_answering(settings, conn=None)
+    judge_llm = stages.verifier.judge.llm
+    assert (judge_llm.retry.max_retries, judge_llm.retry.max_wait_seconds) == (6, 60)
+    assert stages.drafter.llm.meter is judge_llm.meter is stages.meter

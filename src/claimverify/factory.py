@@ -11,7 +11,7 @@ d'embedding n'est chargé qu'au premier usage (BgeEmbedder).
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
@@ -20,7 +20,7 @@ from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudg
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.indexing.chunking import Chunker, FixedSizeChunker
 from claimverify.indexing.loading import FileLoader, Loader
-from claimverify.llm import LLM, make_llm
+from claimverify.llm import LLM, RetryPolicy, UsageMeter, make_llm
 from claimverify.settings import LLMStageSettings, RetrieverSettings, Settings
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,8 @@ def _pick(registry: dict, type_: str, stage: str):
 # Constructeurs par étape
 # ---------------------------------------------------------------------------
 
-def build_llm(settings: Settings, stage: LLMStageSettings, role: str) -> LLM:
+def build_llm(settings: Settings, stage: LLMStageSettings, role: str,
+              meter: UsageMeter | None = None) -> LLM:
     provider = settings.providers[stage.provider]
     api_key = os.getenv(provider.api_key_env)
     if not api_key:
@@ -71,7 +72,8 @@ def build_llm(settings: Settings, stage: LLMStageSettings, role: str) -> LLM:
             f"Clé API manquante : {provider.api_key_env} (fournisseur '{stage.provider}', "
             f"utilisé par {role}). La définir dans .env."
         )
-    return make_llm(role, stage.model, provider.base_url, api_key)
+    retry = RetryPolicy(provider.max_retries, provider.max_wait_seconds, provider.timeout_seconds)
+    return make_llm(role, stage.model, provider.base_url, api_key, retry, meter)
 
 
 def build_embedder(settings: Settings) -> Embedder:
@@ -92,26 +94,29 @@ def build_retriever(cfg: RetrieverSettings, embedder: Embedder, conn, stage: str
     return _pick(RETRIEVERS, cfg.type, stage)(cfg, embedder, conn)
 
 
-def build_drafter(settings: Settings) -> Drafter:
+def build_drafter(settings: Settings, meter: UsageMeter | None = None) -> Drafter:
     cfg = settings.answering.drafter
-    return _pick(DRAFTERS, cfg.type, "answering.drafter")(build_llm(settings, cfg, "draft"))
+    return _pick(DRAFTERS, cfg.type, "answering.drafter")(
+        build_llm(settings, cfg, "draft", meter))
 
 
-def build_decomposer(settings: Settings) -> Decomposer:
+def build_decomposer(settings: Settings, meter: UsageMeter | None = None) -> Decomposer:
     cfg = settings.answering.decomposer
     return _pick(DECOMPOSERS, cfg.type, "answering.decomposer")(
-        build_llm(settings, cfg, "decompose"))
+        build_llm(settings, cfg, "decompose", meter))
 
 
-def build_judge(settings: Settings) -> Judge:
+def build_judge(settings: Settings, meter: UsageMeter | None = None) -> Judge:
     cfg = settings.answering.verifier.judge
-    return _pick(JUDGES, cfg.type, "answering.verifier.judge")(build_llm(settings, cfg, "verify"))
+    return _pick(JUDGES, cfg.type, "answering.verifier.judge")(
+        build_llm(settings, cfg, "verify", meter))
 
 
-def build_verifier(settings: Settings, embedder: Embedder, conn) -> Verifier:
+def build_verifier(settings: Settings, embedder: Embedder, conn,
+                   meter: UsageMeter | None = None) -> Verifier:
     cfg = settings.answering.verifier
     retriever = build_retriever(cfg.retriever, embedder, conn, "answering.verifier.retriever")
-    return _pick(VERIFIERS, cfg.type, "answering.verifier")(retriever, build_judge(settings))
+    return _pick(VERIFIERS, cfg.type, "answering.verifier")(retriever, build_judge(settings, meter))
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +136,9 @@ class AnsweringStages:
     drafter: Drafter
     decomposer: Decomposer
     verifier: Verifier
+    # Partagé par tous les LLM du pipeline : l'orchestrateur y lit l'usage de
+    # chaque étape sans savoir quelles étapes utilisent un LLM.
+    meter: UsageMeter = field(default_factory=UsageMeter)
 
 
 def build_indexing(settings: Settings, embedder: Embedder | None = None) -> IndexingStages:
@@ -145,10 +153,12 @@ def build_answering(settings: Settings, conn, embedder: Embedder | None = None) 
     # Un seul embedder pour tous les retrievers : les questions et les claims
     # doivent être embeddés comme les chunks l'ont été.
     embedder = embedder or build_embedder(settings)
+    meter = UsageMeter()
     return AnsweringStages(
         retriever=build_retriever(settings.answering.retriever, embedder, conn,
                                   "answering.retriever"),
-        drafter=build_drafter(settings),
-        decomposer=build_decomposer(settings),
-        verifier=build_verifier(settings, embedder, conn),
+        drafter=build_drafter(settings, meter),
+        decomposer=build_decomposer(settings, meter),
+        verifier=build_verifier(settings, embedder, conn, meter),
+        meter=meter,
     )

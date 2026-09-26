@@ -21,7 +21,15 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    model_validator,
+)
 
 import claimverify.config  # noqa: F401  (charge le .env avant de le lire ci-dessous)
 
@@ -40,6 +48,10 @@ class _Strict(BaseModel):
 class ProviderSettings(_Strict):
     base_url: str
     api_key_env: str  # nom de la variable de .env qui contient la clé
+    # Nouvelles tentatives (voir llm.py) : les limites varient d'un fournisseur à l'autre.
+    max_retries: NonNegativeInt = 6
+    max_wait_seconds: PositiveFloat = 60
+    timeout_seconds: PositiveFloat = 120
 
 
 class LLMStageSettings(_Strict):

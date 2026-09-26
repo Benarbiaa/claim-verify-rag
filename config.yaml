@@ -9,9 +9,15 @@ providers:                       # LLM endpoints; each names the .env variable h
   groq:
     base_url: https://api.groq.com/openai/v1
     api_key_env: GROQ_API_KEY
+    max_retries: 6              # new attempts after a rate-limit or server error
+    max_wait_seconds: 60        # a longer requested wait (e.g. daily limit) stops the run
+    timeout_seconds: 120        # one request's maximum duration
   gemini:
     base_url: https://generativelanguage.googleapis.com/v1beta/openai/
     api_key_env: GEMINI_API_KEY
+    max_retries: 6              # new attempts after a rate-limit or server error
+    max_wait_seconds: 60        # a longer requested wait (e.g. daily limit) stops the run
+    timeout_seconds: 120        # one request's maximum duration
 
 embedding:                       # shared by both pipelines: chunks and queries MUST use the same model
   type: bge

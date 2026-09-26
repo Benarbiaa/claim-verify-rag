@@ -65,11 +65,15 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## P2: robustness and engineering
 
-- [ ] Retry with backoff on Groq 429 / tokens-per-minute errors (`tenacity` is already
-  installed).
-- [ ] Validate LLM JSON with Pydantic models. Today a malformed verdict silently becomes
-  `unverifiable`, which inflates that class; count parse failures separately.
-- [ ] Replace `print` with `logging`; log token usage per call.
+- [x] Retries in `LLM.chat` with limits per provider in `config.yaml` (`max_retries`,
+  `max_wait_seconds`, `timeout_seconds`): rate limits and server errors wait and retry, a
+  request too large for the per-minute limit or a daily limit stops the run with a clear
+  message.
+- [x] Validate LLM JSON with Pydantic models: claims through the `Claim` contract, verdicts
+  through `Verdict` (with source-consistency rules). Unusable verdicts are counted as `error`.
+- [x] Token usage per stage: each stage event records calls, tokens, retries and waiting time,
+  and the report totals them per role. (Replacing the remaining `print`s with `logging` is
+  still open.)
 - [ ] GitHub Actions: `ruff` + `pytest` (the tests need no DB, GPU or API key).
 - [ ] PDF cleanup at ingest: strip the reference sections and fix hyphenated line breaks.
   Reference lists create noisy chunks that match many claims.

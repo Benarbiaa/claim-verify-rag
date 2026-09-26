@@ -24,6 +24,20 @@ from claimverify.contracts import Chunk, Claim, Draft, Passage, Verdict
 Pipeline = Literal["indexing", "answering"]
 
 
+class Usage(BaseModel):
+    """Appels aux LLM pendant une étape (tout à zéro pour une étape sans LLM)."""
+    calls: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    retries: int = 0            # nouvelles tentatives après une erreur temporaire
+    waited_seconds: float = 0   # temps passé à attendre avant ces tentatives
+    seconds: float = 0          # durée totale des appels, attentes comprises
+
+    def __add__(self, other: "Usage") -> "Usage":
+        return Usage(**{name: getattr(self, name) + getattr(other, name)
+                        for name in type(self).model_fields})
+
+
 class Event(BaseModel):
     """Champs communs, remplis par Run.emit (reporting.py)."""
     run_id: str
@@ -93,6 +107,7 @@ class PassagesRetrieved(Event):
     question_index: int
     passages: list[Passage]
     seconds: float
+    usage: Usage = Usage()
 
 
 class DraftWritten(Event):
@@ -100,6 +115,7 @@ class DraftWritten(Event):
     question_index: int
     draft: Draft
     seconds: float
+    usage: Usage = Usage()
 
 
 class ClaimsExtracted(Event):
@@ -107,6 +123,7 @@ class ClaimsExtracted(Event):
     question_index: int
     claims: list[Claim]
     seconds: float
+    usage: Usage = Usage()
 
 
 class ClaimVerified(Event):
@@ -115,6 +132,7 @@ class ClaimVerified(Event):
     position: int      # 1, 2, ... sur `total`
     total: int
     verdict: Verdict   # contient les passages jugés (evidence)
+    usage: Usage = Usage()
 
 
 class QuestionFinished(Event):

@@ -61,24 +61,28 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     (réponse, claims, verdicts, timings) pour le rapport."""
     timings = {}
     t0 = time.perf_counter()
+    stages.meter.take()  # l'usage de chaque étape se compte à partir d'ici
     run.emit(QuestionStarted, question_index=question_index, question=query)
 
     # --- Étape B : réponse brouillon ---
     passages = stages.retriever.retrieve(query)
     docs_covered = sorted({p.filename for p in passages})
     t1 = time.perf_counter()
-    run.emit(PassagesRetrieved, question_index=question_index, passages=passages, seconds=t1 - t0)
+    run.emit(PassagesRetrieved, question_index=question_index, passages=passages, seconds=t1 - t0,
+             usage=stages.meter.take())
 
     draft = stages.drafter.draft(query, passages)
     t2 = time.perf_counter()
-    run.emit(DraftWritten, question_index=question_index, draft=draft, seconds=t2 - t1)
+    run.emit(DraftWritten, question_index=question_index, draft=draft, seconds=t2 - t1,
+             usage=stages.meter.take())
     timings["retrieval_draft_seconds"] = round(t1 - t0, 2)
     timings["generation_draft_seconds"] = round(t2 - t1, 2)
 
     # --- Étape C : décomposition en claims ---
     claims = stages.decomposer.decompose(draft)
     t3 = time.perf_counter()
-    run.emit(ClaimsExtracted, question_index=question_index, claims=claims, seconds=t3 - t2)
+    run.emit(ClaimsExtracted, question_index=question_index, claims=claims, seconds=t3 - t2,
+             usage=stages.meter.take())
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
     # --- Étape D : vérification, un événement par verdict dès qu'il est prêt ---
@@ -86,7 +90,7 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     for position, verdict in enumerate(stages.verifier.verify(claims), 1):
         verdicts.append(verdict)
         run.emit(ClaimVerified, question_index=question_index, position=position,
-                 total=len(claims), verdict=verdict)
+                 total=len(claims), verdict=verdict, usage=stages.meter.take())
     t4 = time.perf_counter()
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)
@@ -131,6 +135,16 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
         f"- Questions run: {len(run_results)}",
         "",
     ]
+
+    usage = run_metadata.get("usage", {})
+    if usage:
+        lines += [
+            "| Role | Calls | Tokens in | Tokens out | Retries | Waited (s) | Time (s) |",
+            "|---|---|---|---|---|---|---|",
+            *(f"| {role} | {u['calls']} | {u['tokens_in']} | {u['tokens_out']} | {u['retries']} | "
+              f"{u['waited_seconds']} | {u['seconds']} |" for role, u in usage.items()),
+            "",
+        ]
 
     total_counts = dict.fromkeys(VERDICT_LABELS, 0)
     total_claims = 0
@@ -238,6 +252,8 @@ def main():
         "draft_top_k_per_doc": a.retriever.top_k_per_doc,
         "verify_top_k_per_doc": a.verifier.retriever.top_k_per_doc,
         "config": settings.model_dump(),  # tout config.yaml, pour reproduire le run
+        # appels, tokens, nouvelles tentatives et attente, par rôle (draft, decompose, verify)
+        "usage": {role: u.model_dump() for role, u in stages.meter.totals_by_role().items()},
     }
     with open(run.dir / "report.json", "w", encoding="utf-8") as f:
         json.dump({"metadata": run_metadata, "results": run_results}, f, ensure_ascii=False, indent=2)

@@ -44,7 +44,7 @@ class ConsoleSink:
     @staticmethod
     def describe(event: Event) -> str:
         t = event.type
-        s = f"{getattr(event, 'seconds', 0):.1f}s"
+        s = f"{getattr(event, 'seconds', 0):.1f}s" + _usage_note(event)
         if t == "run_started":
             return f"[run] {event.run_id}"
         if t == "documents_loaded":
@@ -66,13 +66,27 @@ class ConsoleSink:
             return f"[decompose] {len(event.claims)} claims ({s})"
         if t == "claim_verified":
             v = event.verdict
-            return f"[verify {event.position}/{event.total}] {VERDICT_ICONS[v.verdict]} {v.verdict}: {v.claim}"
+            note = _usage_note(event).removeprefix(", ")
+            return (f"[verify {event.position}/{event.total}] {VERDICT_ICONS[v.verdict]} {v.verdict}: "
+                    f"{v.claim}" + (f" ({note})" if note else ""))
         if t == "question_finished":
             counts = ", ".join(f"{n} {label}" for label, n in event.verdict_counts.items() if n)
             return f"[done] {counts} ({s})"
         if t == "run_finished":
             return f"[run] finished ({s}) -> {event.summary.get('run_dir', '')}"
         return ""
+
+
+def _usage_note(event: Event) -> str:
+    """", 4.5K tokens, 1 retry (waited 21s)" pour une étape qui a appelé un LLM, sinon ""."""
+    usage = getattr(event, "usage", None)
+    if not usage or not usage.calls:
+        return ""
+    note = f", {(usage.tokens_in + usage.tokens_out) / 1000:.1f}K tokens"
+    if usage.retries:
+        plural = "retry" if usage.retries == 1 else "retries"
+        note += f", {usage.retries} {plural} (waited {usage.waited_seconds:.0f}s)"
+    return note
 
 
 class RecorderSink:

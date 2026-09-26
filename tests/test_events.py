@@ -107,3 +107,20 @@ def test_console_prints_one_short_line_per_answering_event(tmp_path, capsys):
     lines = [line for line in capsys.readouterr().out.splitlines() if line]
     assert len(lines) == 7
     assert lines[4].startswith("[verify 1/2] ✓ supported")
+
+
+def test_stage_events_carry_their_llm_usage(tmp_path):
+    sink = ListSink()
+    stages = answering_stages()
+    meter = stages.meter
+    for llm in (stages.drafter.llm, stages.decomposer.llm, stages.verifier.judge.llm):
+        object.__setattr__(llm, "meter", meter)  # shared meter, as the factory does
+    run_single_question("Q?", stages, Run("answering", sinks=[sink], runs_dir=tmp_path))
+
+    by_type = {}
+    for e in sink.events:
+        by_type.setdefault(e.type, []).append(e)
+    assert by_type["passages_retrieved"][0].usage.calls == 0   # retrieval uses no LLM
+    assert by_type["draft_written"][0].usage.calls == 1
+    assert by_type["draft_written"][0].usage.tokens_in == 100
+    assert [e.usage.calls for e in by_type["claim_verified"]] == [1, 1]  # one judge call each
