@@ -134,7 +134,7 @@ export function PlatePanel({ state, selected, onSelect, judging }: Props) {
                             'no citation in the draft'
                           )}
                         </span>
-                        {mismatch && <span className="font-semibold text-error-ink">· judge used other sources</span>}
+                        {mismatch && <span className="font-semibold text-ink-2 underline decoration-dotted underline-offset-2">· judge relied on other sources</span>}
                         {inFlight && <span className="font-semibold text-ink-2">· judging…</span>}
                       </span>
                     </th>
@@ -181,10 +181,10 @@ function Cell({ stance, cited, doc, inFlight }: { stance: Stance | null; cited: 
       <TooltipTrigger asChild>
         <span
           className={cn(
-            'relative mx-auto flex size-8 items-center justify-center rounded-md',
+            'relative mx-auto flex size-8 items-center justify-center rounded-full ring-1 ring-rule ring-inset',
             !stance && 'hatch',
             !stance && inFlight && 'animate-pulse',
-            cited && 'ring-[1.5px] ring-ink-3 ring-inset',
+            cited && 'rounded-md ring-[1.5px] ring-ink-3',
           )}
           aria-label={label + (cited ? ' (the source the draft cited)' : '')}
           role="img"

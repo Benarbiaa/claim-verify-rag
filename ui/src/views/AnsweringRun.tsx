@@ -42,9 +42,15 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
   const shown = replay ? events.slice(0, replay.cursor) : events
   const state = useMemo(() => buildAnsweringState(shown, questionIndex), [shown, questionIndex])
   const shownForQuestion = useMemo(() => questionEvents(shown, questionIndex), [shown, questionIndex])
-  const timeline: Timeline = live ? buildTimeline(allForQuestion, 'answering') : fullTimeline
   const reachedIndex = shownForQuestion.length - 1
-  const reached = reachedIndex >= 0 ? (buildTimeline(shownForQuestion, 'answering').offsets[reachedIndex] ?? 0) : 0
+  const recordedReach = reachedIndex >= 0 ? (buildTimeline(shownForQuestion, 'answering').offsets[reachedIndex] ?? 0) : 0
+  // live: the axis keeps growing while a stage runs or a wait is in progress
+  const running = !!live && live.status === 'running' && !!state.question && !state.finished
+  const now = useNow(running)
+  const started = allForQuestion.find((e) => e.type === 'question_started')
+  const elapsed = running && started ? Math.max(recordedReach, now / 1000 - Date.parse(started.time) / 1000) : recordedReach
+  const timeline: Timeline = live ? withPendingTime(fullTimeline, state, elapsed) : fullTimeline
+  const reached = live ? elapsed : recordedReach
 
   // the cue in flight (replay): its target time on the axis, and how long it takes to land
   const cue = replay?.flight
@@ -68,8 +74,8 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
   const followPanel = followedPanel(state, shown.length)
   const panel = manualPanel ?? followPanel
   const latestVerdict = Object.values(state.verdicts).sort((a, b) => b.position - a.position)[0]
-  const judging = judgingPosition(state, flight?.event, !!live)
-  const followClaim = judging && state.claims ? state.claims[judging - 1]?.id : latestVerdict?.verdict.claim_id
+  const judging = judgingPosition(state, flight?.event, running)
+  const followClaim = judging && state.claims ? state.claims[judging - 1]?.id : state.finished ? mostTelling(state) : latestVerdict?.verdict.claim_id
   const selectedClaim = manualClaim ?? followClaim ?? null
 
   const steps = buildSteps(state, fullTimeline, live?.status === 'failed')
@@ -87,7 +93,7 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
     <div className="mx-auto w-full max-w-[1760px] px-4 pt-5 pb-16 sm:px-6">
       <header className="mb-3 flex flex-wrap items-start justify-between gap-x-8 gap-y-2">
         <div className="min-w-0 max-w-[80ch]">
-          <h1 className="text-[clamp(1.25rem,0.95rem+0.95vw,1.9rem)] leading-tight font-extrabold tracking-[-0.025em] text-balance">{question}</h1>
+          <h1 className="text-[clamp(1.25rem,0.95rem+0.95vw,1.9rem)] leading-tight [@media(max-height:760px)]:text-[1.35rem] font-extrabold tracking-[-0.025em] text-balance">{question}</h1>
           <p className="figures mt-1 flex flex-wrap gap-x-3 text-xs text-ink-3">
             <span>{formatRunDate(summary.run_id)}</span>
             {state.configFile && <span>{state.configFile}</span>}
@@ -163,6 +169,45 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
   )
 }
 
+/** At the end, the claim worth showing first: sources disagreeing beats sources agreeing. */
+function mostTelling(state: AnsweringState): string | undefined {
+  const order = ['contested', 'contradicted', 'error', 'unverifiable', 'supported']
+  const verdicts = Object.values(state.verdicts).sort((a, b) => a.position - b.position)
+  for (const label of order) {
+    const hit = verdicts.find((v) => v.verdict.verdict === label)
+    if (hit) return hit.verdict.claim_id
+  }
+  return undefined
+}
+
+/** A clock that ticks while `active`, for the live axis. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    const id = window.setInterval(() => setNow(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [active])
+  return now
+}
+
+/** Live: the stage in progress (and a wait announced in it) drawn up to now. */
+function withPendingTime(timeline: Timeline, state: AnsweringState, now: number): Timeline {
+  const last = timeline.segments.at(-1)?.end ?? 0
+  if (state.finished || now <= last) return timeline
+  const stage = state.current && state.current !== 'done' ? state.current : 'verify'
+  const segments = [...timeline.segments]
+  const wait = state.pendingWait
+  if (wait && wait.at >= last) {
+    if (wait.at > last) segments.push({ stage, kind: 'work', start: last, end: wait.at })
+    segments.push({ stage, kind: 'wait', start: wait.at, end: Math.min(now, wait.at + wait.seconds) })
+    if (now > wait.at + wait.seconds) segments.push({ stage, kind: 'work', start: wait.at + wait.seconds, end: now })
+  } else {
+    segments.push({ stage, kind: 'work', start: last, end: now })
+  }
+  return { ...timeline, segments, total: Math.max(timeline.total, now) }
+}
+
 /** Where the view goes by itself: the output of the latest stage. */
 function followedPanel(state: AnsweringState, shownCount: number): Panel {
   if (shownCount === 0 || !state.question) return 'intro'
@@ -222,7 +267,7 @@ function describeNow(
     }
   }
   if (live?.status === 'running' && !state.finished) {
-    if (state.pendingWait) return <LiveWait wait={state.pendingWait} />
+    if (state.pendingWait) return <LiveWait key={state.pendingWait.at} wait={state.pendingWait} />
     if (!state.passages) return 'Searching every document for passages about the question…'
     if (!state.draft) return 'Writing the draft…'
     if (!state.claims) return 'Splitting the draft into claims…'

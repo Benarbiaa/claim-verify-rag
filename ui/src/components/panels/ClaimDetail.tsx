@@ -1,7 +1,7 @@
 // One claim under the loupe: the verdict, the judge's reasoning, and the evidence it read,
 // split into the sources for (left) and against (right).
 
-import { AlertTriangle } from 'lucide-react'
+import { Split } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { type Stance, type VerdictEntry, citationMismatch, parseCitation, stanceOf } from '@/lib/answering'
 import { formatSeconds, formatTokens, modelOf, plural, shortDoc } from '@/lib/format'
@@ -79,8 +79,8 @@ function Verdict({ entry }: { entry: VerdictEntry }) {
       <p className="mt-1.5 text-xs text-ink-3">{VERDICT_TEXT[v.verdict].meaning}</p>
 
       {mismatch && (
-        <p className="mt-3 flex gap-2 rounded-md bg-error-wash px-3 py-2 text-sm text-ink">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-error-ink" aria-hidden />
+        <p className="mt-3 flex gap-2 rounded-md bg-sunk px-3 py-2 text-sm text-ink">
+          <Split className="mt-0.5 size-4 shrink-0 text-ink-2" aria-hidden />
           <span>
             The draft cited <strong>{shortDoc(mismatch)}</strong>
             {cited?.chunk != null && <> #{cited.chunk}</>}, but the judge's verdict rests on{' '}
@@ -90,7 +90,7 @@ function Verdict({ entry }: { entry: VerdictEntry }) {
       )}
 
       <div className="mt-4">
-        <h3 className="text-xs font-bold tracking-wide text-ink-3 uppercase">Why</h3>
+        <h3 className="text-sm font-bold text-ink">Why the judge decided this</h3>
         <p className="mt-1 text-sm leading-relaxed text-pretty text-ink-2">{v.justification}</p>
       </div>
 
@@ -138,7 +138,7 @@ function Side({ title, stance, sources, passages }: { title: string; stance: Sta
   const empty = sources.length === 0
   return (
     <div className="min-w-0">
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold tracking-wide text-ink-3 uppercase">
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-ink">
         <StanceMark stance={stance} size={12} />
         {title}
       </h3>
