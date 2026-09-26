@@ -16,7 +16,7 @@ question
 [verify loop]    LangGraph: retrieve(claim) → verdict(claim) → next (answering/verification.py)
    │
    ▼
-report           supported / contradicted / unverifiable + justification (answering/pipeline.py)
+report           supported / contradicted / contested / unverifiable (+ error) + justification (answering/pipeline.py)
 ```
 
 ## Module map

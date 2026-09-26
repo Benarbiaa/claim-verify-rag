@@ -3,8 +3,9 @@
 
 An agentic RAG system that **does not trust its own answer**. It drafts an answer from a corpus,
 splits it into atomic factual claims, re-checks **each claim independently against every
-source**, and returns a verdict per claim (**supported**, **contradicted** or **unverifiable**)
-with a justification.
+source**, and returns a verdict per claim with a justification and the passages it was checked
+against: **supported**, **contradicted**, **contested** (the sources disagree with each other) or
+**unverifiable**. A claim the judge failed to assess is marked **error**, counted separately.
 
 Most student RAG demos trust the retrieved chunks blindly. This one treats its own answer as a
 set of falsifiable claims, and it can catch cases where two sources in the corpus disagree.

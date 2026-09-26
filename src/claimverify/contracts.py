@@ -17,14 +17,27 @@ chaque étape seule, à partir du fichier produit par l'étape précédente.
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 # Les verdicts possibles, définis une seule fois. Toute étape qui en a besoin
 # (rapport, résumé, évaluation) les importe d'ici au lieu de les recopier.
-VerdictLabel = Literal["supported", "contradicted", "unverifiable"]
-VERDICT_LABELS: tuple[str, ...] = get_args(VerdictLabel)
+#
+# Les 4 verdicts qu'un juge peut rendre :
+#   supported     au moins une source appuie le claim, aucune ne le contredit
+#   contradicted  les sources contredisent le claim, aucune ne l'appuie
+#   contested     les sources se contredisent ENTRE ELLES sur ce claim
+#   unverifiable  aucune source ne traite du sujet du claim
+JudgeLabel = Literal["supported", "contradicted", "contested", "unverifiable"]
+JUDGE_LABELS: tuple[str, ...] = get_args(JudgeLabel)
+# "error" n'est jamais proposé au juge : c'est notre code qui le pose quand la
+# réponse du juge est inexploitable. Ce n'est pas un jugement sur les sources,
+# il est donc compté à part (et un nouvel essai peut le corriger).
+VerdictLabel = Literal[JudgeLabel, "error"]
+VERDICT_LABELS: tuple[str, ...] = (*JUDGE_LABELS, "error")
 # Icône affichée pour chaque verdict dans les résumés et rapports.
-VERDICT_ICONS: dict[str, str] = {"supported": "✓", "contradicted": "⚠", "unverifiable": "?"}
+VERDICT_ICONS: dict[str, str] = {
+    "supported": "✓", "contradicted": "✗", "contested": "⚠", "unverifiable": "?", "error": "!",
+}
 
 
 # --- Indexation ---------------------------------------------------------------
@@ -83,3 +96,14 @@ class Verdict(BaseModel):
     contradicting_sources: list[str] = []
     original_cited_source: str | None = None
     verifier: str  # quelle implémentation a jugé (ex. "llm_judge:qwen/qwen3.8-27b")
+    evidence: list[Passage] = []  # les passages que le juge a lus pour ce verdict
+
+    @model_validator(mode="after")
+    def _sources_match_the_verdict(self) -> "Verdict":
+        # Un verdict doit être cohérent avec les sources qu'il cite, quelle que
+        # soit l'implémentation du juge (LLM, classifieur...).
+        if self.verdict == "contradicted" and not self.contradicting_sources:
+            raise ValueError("un verdict 'contradicted' doit citer au moins une source qui le contredit")
+        if self.verdict == "contested" and not (self.supporting_sources and self.contradicting_sources):
+            raise ValueError("un verdict 'contested' doit citer des sources des deux côtés")
+        return self

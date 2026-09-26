@@ -3,11 +3,12 @@
 import json
 
 import pytest
+from openai import BadRequestError
 
 from claimverify.answering.decomposition import decompose_into_claims
 from claimverify.answering.verification import judge_with_llm, should_continue
-from claimverify.contracts import Claim, Draft
-from fakes import fake_llm
+from claimverify.contracts import Claim, Draft, Passage
+from fakes import failing_llm, fake_llm, provider_error
 
 DRAFT = Draft(question="Q?", text="RAG was introduced in 2020.", passages=[])
 
@@ -35,29 +36,57 @@ def test_decompose_rejects_a_malformed_claim_at_the_boundary():
 
 
 CLAIM = Claim(id="c1", claim="X", cited_source="a.pdf")
-EVIDENCE = "[Source: a.pdf | chunk #0 | type: peer_reviewed_paper]\n..."
+PASSAGES = [Passage(filename="a.pdf", source_type="peer_reviewed_paper", chunk_index=0,
+                    text="Evidence.", score=0.8)]
 
 
-def test_judge_parses_the_verdict():
-    verdict = {
-        "verdict": "supported",
-        "justification": "a.pdf says so",
-        "supporting_sources": ["a.pdf"],
-        "contradicting_sources": [],
-    }
-    entry = judge_with_llm(fake_llm(json.dumps(verdict), model="judge-model"), CLAIM, EVIDENCE)
+def judge(raw: str):
+    return judge_with_llm(fake_llm(raw, model="judge-model"), CLAIM, PASSAGES)
+
+
+def test_judge_parses_the_verdict_and_records_its_evidence():
+    entry = judge(json.dumps({"verdict": "supported", "justification": "a.pdf says so",
+                              "supporting_sources": ["a.pdf"], "contradicting_sources": []}))
     assert entry.verdict == "supported"
     assert entry.original_cited_source == "a.pdf"
     assert entry.verifier == "llm_judge:judge-model"
+    assert entry.evidence == PASSAGES
 
 
-def test_judge_falls_back_to_unverifiable_on_bad_json():
-    assert judge_with_llm(fake_llm("oops"), CLAIM, EVIDENCE).verdict == "unverifiable"
+def test_judge_accepts_contested():
+    entry = judge(json.dumps({"verdict": "contested", "justification": "a vs b",
+                              "supporting_sources": ["a.pdf"], "contradicting_sources": ["b.pdf"]}))
+    assert entry.verdict == "contested"
 
 
-def test_judge_falls_back_to_unverifiable_on_unknown_label():
-    raw = '{"verdict": "probably", "justification": "?"}'
-    assert judge_with_llm(fake_llm(raw), CLAIM, EVIDENCE).verdict == "unverifiable"
+# Every unusable answer becomes "error" (never "unverifiable"), keeping the raw answer.
+@pytest.mark.parametrize("raw", [
+    '{"verdict": "supported", "justification": "The source states tha',     # truncated
+    'Here is my verdict: {"verdict": "supported", "justification": "x"}',   # text around the JSON
+    "",                                                                      # empty answer
+    '{"verdict": "probably", "justification": "?"}',                         # unknown verdict
+    '{"verdict": "Supported", "justification": "x"}',                        # wrong case
+    '{"verdict": "supported"}',                                              # missing field
+    '[{"verdict": "supported", "justification": "x"}]',                      # not an object
+    '{"verdict": "contradicted", "justification": "x", "supporting_sources": ["a.pdf"]}',  # smoke c7
+    '{"verdict": "error", "justification": "x"}',                            # judge may not say error
+])
+def test_unusable_judge_answers_become_error(raw):
+    entry = judge(raw)
+    assert entry.verdict == "error"
+    assert entry.evidence == PASSAGES  # we still know what the judge was shown
+
+
+def test_provider_json_rejection_becomes_error_instead_of_crashing():
+    llm = failing_llm(provider_error("json_validate_failed"))
+    entry = judge_with_llm(llm, CLAIM, PASSAGES)
+    assert entry.verdict == "error"
+    assert "rejeté par le fournisseur" in entry.justification
+
+
+def test_other_provider_errors_are_not_hidden():
+    with pytest.raises(BadRequestError):
+        judge_with_llm(failing_llm(provider_error("invalid_api_key")), CLAIM, PASSAGES)
 
 
 def test_should_continue_loops_until_claims_exhausted():

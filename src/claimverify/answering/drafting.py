@@ -54,7 +54,7 @@ passages. Strict rules:
   each other. If passages from different sources seem to contradict each other, state that clearly
   and explain the disagreement instead of arbitrarily picking a side or ignoring one source.
 - Cite the source of each claim by naming the document in brackets, e.g.
-  [Is Semantic Chunking Worth the Computational Cost?.pdf].
+  [vectara-semantic-chunking-naacl2025.pdf].
 - Be concise and factual. Do not add knowledge beyond what's in the provided passages.
 """
 

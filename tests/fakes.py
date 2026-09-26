@@ -22,3 +22,22 @@ class FakeClient:
 
 def fake_llm(content: str, model: str = "fake-model") -> LLM:
     return LLM(role="test", model=model, base_url="http://fake", client=FakeClient(content))
+
+
+def provider_error(code: str) -> Exception:
+    """An openai.BadRequestError like the one Groq returns, e.g. code 'json_validate_failed'."""
+    import httpx
+    from openai import BadRequestError
+
+    request = httpx.Request("POST", "http://fake/chat/completions")
+    return BadRequestError(f"Error code: 400 - {code}", response=httpx.Response(400, request=request),
+                           body={"error": {"code": code}})
+
+
+def failing_llm(error: Exception, model: str = "fake-model") -> LLM:
+    """An LLM whose every call raises `error`."""
+    def create(**kwargs):
+        raise error
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    return LLM(role="test", model=model, base_url="http://fake", client=client)

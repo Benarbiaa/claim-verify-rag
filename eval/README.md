@@ -24,8 +24,8 @@ Target: about 30 claims, balanced across these categories:
 | `complementary` | Anthropic contextual-retrieval claims next to the chunking papers | supported (must NOT be contradicted) |
 | `out_of_corpus` | Plausible RAG facts the corpus never discusses | unverifiable |
 
-\* The verifier currently has only 3 verdicts, so a conflict comes out as `contradicted`. See
-`docs/roadmap.md`, item P0-3.
+\* `contested` exists since P0-3. Answers the judge failed to produce are labelled `error`,
+never `unverifiable`, so they don't distort that class.
 
 Metrics: per-class precision and recall, a confusion matrix, and a separate
 **false-contradiction rate** on `complementary` claims.

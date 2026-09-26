@@ -3,11 +3,38 @@
 import pytest
 from pydantic import ValidationError
 
-from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Draft, Passage, Verdict
+from claimverify.contracts import (
+    JUDGE_LABELS,
+    VERDICT_ICONS,
+    VERDICT_LABELS,
+    Claim,
+    Draft,
+    Passage,
+    Verdict,
+)
 
 
 def test_verdict_labels_are_defined_once():
-    assert VERDICT_LABELS == ("supported", "contradicted", "unverifiable")
+    assert JUDGE_LABELS == ("supported", "contradicted", "contested", "unverifiable")
+    # "error" is set by our code, never offered to the judge
+    assert VERDICT_LABELS == (*JUDGE_LABELS, "error")
+
+
+def verdict(label, supporting=(), contradicting=()):
+    return Verdict(claim_id="c1", claim="X", verdict=label, justification="...", verifier="test",
+                   supporting_sources=list(supporting), contradicting_sources=list(contradicting))
+
+
+def test_contradicted_must_name_a_contradicting_source():
+    with pytest.raises(ValidationError, match="contradicted"):
+        verdict("contradicted", supporting=["a.pdf"])  # the smoke-run c7 case
+    assert verdict("contradicted", contradicting=["a.pdf"]).verdict == "contradicted"
+
+
+def test_contested_must_name_sources_on_both_sides():
+    with pytest.raises(ValidationError, match="contested"):
+        verdict("contested", supporting=["a.pdf"])
+    assert verdict("contested", supporting=["a.pdf"], contradicting=["b.pdf"]).verdict == "contested"
 
 
 def test_every_verdict_label_has_an_icon():

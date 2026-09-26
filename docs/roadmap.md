@@ -32,10 +32,10 @@ them before building the eval baseline**, or the numbers you report will be skew
   *Check:* count `model.tokenizer(chunk)["input_ids"]` lengths over the corpus.
   *Fix:* chunk by tokenizer tokens (for example 400 tokens with 15% overlap).
 
-- [ ] **P0-3. Split "contradicted" into two verdicts.** Today it covers both "the claim is
-  false" and "the sources disagree with each other". Add `contested` (the sources conflict;
-  name them) and keep `contradicted` (the evidence says the claim is wrong). This is the core
-  story of the project, so the verdict set should express it directly.
+- [x] **P0-3. Split "contradicted" into two verdicts.** Added `contested` (the sources conflict
+  with each other) next to `contradicted` (the evidence says the claim is wrong), with rules
+  tying each verdict to its sources. Unusable judge answers are now `error` instead of a fake
+  `unverifiable`, and each verdict records the passages it was judged on.
 
 - [ ] **P0-4. Re-ingest after the corpus rename.** `make db-reset ingest`. See
   `data/corpus/SOURCES.md`.

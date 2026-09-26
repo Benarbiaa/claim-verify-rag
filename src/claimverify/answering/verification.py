@@ -28,36 +28,41 @@ from typing import Protocol, TypedDict, runtime_checkable
 
 import psycopg2
 from langgraph.graph import END, StateGraph
-from pydantic import ValidationError
+from openai import BadRequestError
 
 from claimverify.answering.retrieval import Retriever, format_evidence
 from claimverify.config import add_db_url_argument
-from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, Claim, Passage, Verdict
+from claimverify.contracts import JUDGE_LABELS, VERDICT_ICONS, VERDICT_LABELS, Claim, Passage, Verdict
 from claimverify.llm import LLM
 from claimverify.settings import add_config_argument, load_settings
 
 VERDICT_SYSTEM_PROMPT = """You are a rigorous claim verifier (fact-checker). You are given a claim
-and a set of source passages, potentially from MULTIPLE different documents. Your task: judge
-whether the claim is supported, contradicted, or unverifiable based on these passages.
+and a set of source passages, potentially from MULTIPLE different documents. Judge the claim using
+ONLY these passages: a claim you believe is true but that no passage addresses is "unverifiable".
 
 IMPORTANT: Always respond in English, matching the language of the claim and evidence.
 
-Strict verdict definitions:
-- "supported": at least one source clearly states or strongly implies the claim, AND no retrieved
-  source contradicts it.
-- "contradicted": at least one source states something that conflicts with the claim, even if
-  other sources support it elsewhere (the conflict must be flagged).
-- "unverifiable": none of the retrieved sources speak to the claim's subject, either for or
-  against. Do not confuse this with "contradicted": absence of evidence is not opposition.
+Verdict definitions (pick exactly one):
+- "supported": at least one source clearly states or strongly implies the claim, and no source
+  states something incompatible with it.
+- "contradicted": the sources state something incompatible with the claim (a different number,
+  name, date, direction of effect...), and no source supports it.
+- "contested": the sources disagree with EACH OTHER on this claim: at least one supports it and at
+  least one states something incompatible with it. Name the documents on each side.
+- "unverifiable": no passage addresses the claim's subject, for or against. Absence of evidence
+  is not contradiction.
 
-Important: if sources contradict EACH OTHER on this claim (e.g. one document supports it, another
-contradicts it), the verdict must be "contradicted", and the justification must explicitly name
-the documents that disagree.
+A source that discusses a different technique, dataset or setting does NOT contradict the claim:
+contradiction requires incompatible statements about the same thing. For example, a paper that
+proposes a complementary method is not evidence against another paper's result.
+
+The source lists must match the verdict: "contradicted" needs at least one contradicting source,
+"contested" needs at least one source on each side.
 
 Respond ONLY with a valid JSON object, no text before or after, in this format:
 
 {
-  "verdict": "supported" | "contradicted" | "unverifiable",
+  "verdict": "supported" | "contradicted" | "contested" | "unverifiable",
   "justification": "concise explanation, citing source documents by filename",
   "supporting_sources": ["filename.pdf", ...],
   "contradicting_sources": ["filename.pdf", ...]
@@ -88,39 +93,55 @@ def debug_single_claim(claim_text: str, retriever: Retriever):
 # Jugement d'un claim par un LLM
 # ---------------------------------------------------------------------------
 
-def judge_with_llm(llm: LLM, claim: Claim, evidence: str) -> Verdict:
-    """Demande un verdict au LLM pour un claim, à partir des passages déjà mis en forme."""
+def judge_with_llm(llm: LLM, claim: Claim, passages: list[Passage]) -> Verdict:
+    """Demande un verdict au LLM pour un claim, au vu des passages.
+
+    Une réponse inexploitable donne le verdict "error" (jamais "unverifiable",
+    qui est une conclusion sur les sources) : JSON invalide ou tronqué, verdict
+    inconnu, champ manquant, sources incohérentes avec le verdict, ou JSON
+    rejeté par le fournisseur lui-même. La réponse brute est gardée.
+    """
     user_message = f"""Claim to verify:
 "{claim.claim}"
 
 Source passages (from multiple documents, evaluated independently of the source originally
 cited by the claim):
 
-{evidence}
+{format_evidence(passages)}
 """
-    raw_text = llm.chat(
-        [
-            {"role": "system", "content": VERDICT_SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
-        json_mode=True,
-    )
-
     identity = {
         "claim_id": claim.id,
         "claim": claim.claim,
         "original_cited_source": claim.cited_source,
         "verifier": f"llm_judge:{llm.model}",
+        "evidence": passages,
     }
+    raw_text = ""
     try:
-        return Verdict(**identity, **json.loads(raw_text))
-    except (json.JSONDecodeError, TypeError, ValidationError):
-        # Réponse inexploitable (JSON invalide, verdict inconnu, champ manquant).
-        return Verdict(
-            **identity,
-            verdict="unverifiable",
-            justification=f"Erreur de parsing JSON du LLM. Réponse brute : {raw_text[:200]}",
-        )
+        raw_text = llm.chat(
+            [
+                {"role": "system", "content": VERDICT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            json_mode=True,
+        ) or ""
+        data = json.loads(raw_text)
+        if not isinstance(data, dict) or data.get("verdict") not in JUDGE_LABELS:
+            raise ValueError(f"verdict absent ou hors des {len(JUDGE_LABELS)} verdicts du juge")
+        return Verdict(**identity, **data)
+    except BadRequestError as e:
+        # En mode JSON, Groq peut rejeter lui-même une réponse qui n'est pas du
+        # JSON valide (souvent tronquée). Les autres erreurs 400 restent des erreurs.
+        if "json_validate_failed" not in str(e):
+            raise
+        reason, raw_text = "JSON rejeté par le fournisseur", str(e)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:  # ValidationError en hérite
+        reason = f"{type(e).__name__}: {str(e).splitlines()[0]}"
+    return Verdict(
+        **identity,
+        verdict="error",
+        justification=f"Réponse du juge inexploitable ({reason}). Réponse brute : {raw_text[:300]}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +165,7 @@ class LLMJudge:
         self.llm = llm
 
     def judge(self, claim: Claim, passages: list[Passage]) -> Verdict:
-        return judge_with_llm(self.llm, claim, format_evidence(passages))
+        return judge_with_llm(self.llm, claim, passages)
 
 
 @runtime_checkable
@@ -214,10 +235,8 @@ def print_summary(verdicts: list[Verdict]):
     print("\n" + "=" * 100)
     print("RÉSUMÉ DE LA VÉRIFICATION")
     print("=" * 100)
-    print(f"Total : {len(verdicts)} claims — "
-          f"{counts['supported']} supportés, "
-          f"{counts['contradicted']} contredits, "
-          f"{counts['unverifiable']} non vérifiables\n")
+    detail = ", ".join(f"{n} {label}" for label, n in counts.items() if n)
+    print(f"Total : {len(verdicts)} claims — {detail}\n")
 
     for v in verdicts:
         print(f"[{VERDICT_ICONS[v.verdict]}] {v.claim_id} — {v.verdict.upper()}")
