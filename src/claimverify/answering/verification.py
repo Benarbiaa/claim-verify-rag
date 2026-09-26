@@ -24,6 +24,7 @@ Usage :
 
 import argparse
 import json
+from collections.abc import Iterator
 from typing import Protocol, TypedDict, runtime_checkable
 
 import psycopg2
@@ -172,7 +173,9 @@ class LLMJudge:
 class Verifier(Protocol):
     """Interface : rend un verdict pour chaque claim."""
 
-    def verify(self, claims: list[Claim]) -> list[Verdict]: ...
+    def verify(self, claims: list[Claim]) -> Iterator[Verdict]:
+        """Rend les verdicts un par un, dès que chacun est prêt (même ordre que les claims)."""
+        ...
 
 
 class VerifierState(TypedDict):
@@ -213,14 +216,19 @@ class LangGraphVerifier:
         graph.add_conditional_edges("judge", should_continue, {"retrieve": "retrieve", "end": END})
         return graph.compile()
 
-    def verify(self, claims: list[Claim]) -> list[Verdict]:
+    def verify(self, claims: list[Claim]) -> Iterator[Verdict]:
         if not claims:
-            return []
+            return
         initial: VerifierState = {"claims": claims, "current_index": 0,
                                   "passages": [], "verdicts": []}
         # 2 étapes par claim (retrieve + judge) : la limite par défaut de
         # LangGraph (25 étapes) ferait planter une réponse de plus de 12 claims.
-        return self.graph.invoke(initial, {"recursion_limit": 2 * len(claims) + 5})["verdicts"]
+        config = {"recursion_limit": 2 * len(claims) + 5}
+        # stream() rend la sortie de chaque noeud dès qu'il a fini : après
+        # chaque passage dans "judge", le dernier verdict ajouté est prêt.
+        for update in self.graph.stream(initial, config, stream_mode="updates"):
+            if "judge" in update:
+                yield update["judge"]["verdicts"][-1]
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +291,7 @@ def main():
 
     verifier = build_verifier(settings, build_embedder(settings), conn)
     print(f"\nVérification de {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")
-    verdicts = verifier.verify(claims)
+    verdicts = list(verifier.verify(claims))
     conn.close()
 
     print_summary(verdicts)

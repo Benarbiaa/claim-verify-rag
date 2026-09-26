@@ -70,7 +70,7 @@ def run_single_question(query: str, stages: AnsweringStages) -> dict:
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
     # --- Étape D : vérification de chaque claim ---
-    verdicts = stages.verifier.verify(claims)
+    verdicts = list(stages.verifier.verify(claims))
     t4 = time.perf_counter()
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)

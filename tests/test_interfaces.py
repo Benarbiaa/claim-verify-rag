@@ -140,7 +140,7 @@ def test_llm_judge_sends_the_passages_and_returns_a_verdict():
 
 def test_verifier_retrieves_then_judges_each_claim_in_order():
     retriever, judge = FakeRetriever(), FakeJudge()
-    verdicts = LangGraphVerifier(retriever, judge).verify(claims(3))
+    verdicts = list(LangGraphVerifier(retriever, judge).verify(claims(3)))
     assert retriever.queries == ["claim 1", "claim 2", "claim 3"]
     assert judge.seen == [("c1", [PASSAGE]), ("c2", [PASSAGE]), ("c3", [PASSAGE])]
     assert [v.claim_id for v in verdicts] == ["c1", "c2", "c3"]
@@ -148,8 +148,18 @@ def test_verifier_retrieves_then_judges_each_claim_in_order():
 
 def test_verifier_handles_more_than_twelve_claims():
     # LangGraph's default limit is 25 steps, i.e. 12 claims at 2 steps each
-    assert len(LangGraphVerifier(FakeRetriever(), FakeJudge()).verify(claims(15))) == 15
+    assert len(list(LangGraphVerifier(FakeRetriever(), FakeJudge()).verify(claims(15)))) == 15
 
 
 def test_verifier_with_no_claims_returns_no_verdicts():
-    assert LangGraphVerifier(FakeRetriever(), FakeJudge()).verify([]) == []
+    assert list(LangGraphVerifier(FakeRetriever(), FakeJudge()).verify([])) == []
+
+
+def test_verifier_yields_each_verdict_as_soon_as_it_is_ready():
+    judge = FakeJudge()
+    verdicts = LangGraphVerifier(FakeRetriever(), judge).verify(claims(3))
+    first = next(verdicts)
+    # the first verdict arrives before the other claims are even judged
+    assert first.claim_id == "c1"
+    assert [claim_id for claim_id, _ in judge.seen] == ["c1"]
+    assert [v.claim_id for v in verdicts] == ["c2", "c3"]
