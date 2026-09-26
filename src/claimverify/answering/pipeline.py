@@ -11,7 +11,8 @@ Les étapes sont construites UNE SEULE FOIS à partir de config.yaml (voir
 factory.py), puis enchaînées en mémoire via leurs interfaces : ce fichier ne
 sait pas quel modèle, quelle base ou quelle bibliothèque chaque étape utilise.
 
-Produit un rapport horodaté (JSON + Markdown) dans reports/, avec :
+Chaque run a son dossier runs/<run_id>/ : events.jsonl (la sortie de chaque étape,
+voir events.py) et un rapport (report.json + report.md) avec :
     - la réponse brouillon, les claims, les verdicts
     - le temps de chaque étape (utile pour du benchmarking modèle/paramètres)
     - un résumé agrégé si plusieurs questions sont passées en une fois
@@ -33,44 +34,59 @@ lignes vides et lignes commençant par # ignorées) :
 import argparse
 import json
 import time
-from datetime import datetime, timezone
-from pathlib import Path
 
 import psycopg2
 
 from claimverify.config import add_db_url_argument
 from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
+from claimverify.events import (
+    ClaimsExtracted,
+    ClaimVerified,
+    DraftWritten,
+    PassagesRetrieved,
+    QuestionFinished,
+    QuestionStarted,
+    RunFinished,
+    RunStarted,
+)
 from claimverify.factory import AnsweringStages, build_answering
+from claimverify.reporting import Run
 from claimverify.settings import LLMStageSettings, Settings, add_config_argument, load_settings
 
-# Rapports écrits dans ./reports relatif au répertoire courant (racine du repo
-# quand on passe par le Makefile).
-REPORTS_DIR = Path.cwd() / "reports"
 
-
-def run_single_question(query: str, stages: AnsweringStages) -> dict:
-    """Exécute B -> C -> D pour une seule question et retourne un dict complet
+def run_single_question(query: str, stages: AnsweringStages, run: Run,
+                        question_index: int = 1) -> dict:
+    """Exécute B -> C -> D pour une seule question, émet un événement après
+    chaque étape (et après chaque verdict), et retourne un dict complet
     (réponse, claims, verdicts, timings) pour le rapport."""
     timings = {}
     t0 = time.perf_counter()
+    run.emit(QuestionStarted, question_index=question_index, question=query)
 
     # --- Étape B : réponse brouillon ---
     passages = stages.retriever.retrieve(query)
     docs_covered = sorted({p.filename for p in passages})
-
     t1 = time.perf_counter()
+    run.emit(PassagesRetrieved, question_index=question_index, passages=passages, seconds=t1 - t0)
+
     draft = stages.drafter.draft(query, passages)
     t2 = time.perf_counter()
+    run.emit(DraftWritten, question_index=question_index, draft=draft, seconds=t2 - t1)
     timings["retrieval_draft_seconds"] = round(t1 - t0, 2)
     timings["generation_draft_seconds"] = round(t2 - t1, 2)
 
     # --- Étape C : décomposition en claims ---
     claims = stages.decomposer.decompose(draft)
     t3 = time.perf_counter()
+    run.emit(ClaimsExtracted, question_index=question_index, claims=claims, seconds=t3 - t2)
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
-    # --- Étape D : vérification de chaque claim ---
-    verdicts = list(stages.verifier.verify(claims))
+    # --- Étape D : vérification, un événement par verdict dès qu'il est prêt ---
+    verdicts = []
+    for position, verdict in enumerate(stages.verifier.verify(claims), 1):
+        verdicts.append(verdict)
+        run.emit(ClaimVerified, question_index=question_index, position=position,
+                 total=len(claims), verdict=verdict)
     t4 = time.perf_counter()
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)
@@ -78,6 +94,8 @@ def run_single_question(query: str, stages: AnsweringStages) -> dict:
     counts = dict.fromkeys(VERDICT_LABELS, 0)
     for v in verdicts:
         counts[v.verdict] += 1
+    run.emit(QuestionFinished, question_index=question_index, verdict_counts=counts,
+             seconds=t4 - t0)
 
     # Le rapport est du JSON : on y met les contrats sous forme de dicts.
     return {
@@ -200,19 +218,20 @@ def main():
     conn = psycopg2.connect(args.db_url)
     stages = build_answering(settings, conn)
 
+    run = Run("answering")
+    start = time.perf_counter()
+    run.emit(RunStarted, config=settings.model_dump(),
+             inputs={"config_file": str(args.config), "questions": questions})
+
     run_results = []
-    for i, question in enumerate(questions, 1):
-        print(f"\n[{i}/{len(questions)}] {question}")
-        result = run_single_question(question, stages)
-        print(f"  -> {result['verdict_counts']} in {result['timings']['total_seconds']}s")
-        run_results.append(result)
+    try:
+        for i, question in enumerate(questions, 1):
+            run_results.append(run_single_question(question, stages, run, question_index=i))
+    finally:
+        conn.close()
 
-    conn.close()
-
-    REPORTS_DIR.mkdir(exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     run_metadata = {
-        "timestamp": timestamp,
+        "timestamp": run.run_id,
         "config_file": str(args.config),
         "models": models,
         "embedding_model": settings.embedding.model,
@@ -220,18 +239,14 @@ def main():
         "verify_top_k_per_doc": a.verifier.retriever.top_k_per_doc,
         "config": settings.model_dump(),  # tout config.yaml, pour reproduire le run
     }
-
-    json_path = REPORTS_DIR / f"report_{timestamp}.json"
-    md_path = REPORTS_DIR / f"report_{timestamp}.md"
-
-    with open(json_path, "w", encoding="utf-8") as f:
+    with open(run.dir / "report.json", "w", encoding="utf-8") as f:
         json.dump({"metadata": run_metadata, "results": run_results}, f, ensure_ascii=False, indent=2)
-
-    with open(md_path, "w", encoding="utf-8") as f:
+    with open(run.dir / "report.md", "w", encoding="utf-8") as f:
         f.write(build_markdown_report(run_results, run_metadata))
 
-    print(f"\nRapport sauvegardé :\n  {json_path}\n  {md_path}")
-
+    run.emit(RunFinished, seconds=time.perf_counter() - start, summary={
+        "questions": len(questions), "run_dir": str(run.dir),
+    })
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,109 @@
+"""Pipeline events: emitted after each stage, recorded to disk, reloadable. No network, no database."""
+
+import json
+from pathlib import Path
+
+from claimverify.answering.decomposition import LLMDecomposer
+from claimverify.answering.drafting import LLMDrafter
+from claimverify.answering.pipeline import run_single_question
+from claimverify.answering.verification import LangGraphVerifier, LLMJudge
+from claimverify.contracts import Chunk, Document
+from claimverify.events import ClaimVerified, DraftWritten
+from claimverify.factory import AnsweringStages, IndexingStages
+from claimverify.indexing import ingest
+from claimverify.reporting import ConsoleSink, RecorderSink, Run, load_events
+from claimverify.settings import load_settings
+from fakes import fake_llm
+from test_interfaces import PASSAGE, FakeEmbedder, FakeRetriever
+
+CONFIG = Path(__file__).parent.parent / "config.yaml"
+CLAIMS = json.dumps({"claims": [{"id": "c1", "claim": "A"}, {"id": "c2", "claim": "B"}]})
+VERDICT = json.dumps({"verdict": "supported", "justification": "a.pdf says so",
+                      "supporting_sources": ["a.pdf"], "contradicting_sources": []})
+
+
+class ListSink:
+    def __init__(self):
+        self.events = []
+
+    def handle(self, event):
+        self.events.append(event)
+
+
+def answering_stages() -> AnsweringStages:
+    return AnsweringStages(
+        retriever=FakeRetriever(),
+        drafter=LLMDrafter(fake_llm("Draft answer [a.pdf].")),
+        decomposer=LLMDecomposer(fake_llm(CLAIMS)),
+        verifier=LangGraphVerifier(FakeRetriever(), LLMJudge(fake_llm(VERDICT))),
+    )
+
+
+def test_answering_emits_one_event_per_stage_and_per_verdict(tmp_path):
+    sink = ListSink()
+    run = Run("answering", sinks=[sink], runs_dir=tmp_path)
+    run_single_question("Q?", answering_stages(), run)
+
+    assert [e.type for e in sink.events] == [
+        "question_started", "passages_retrieved", "draft_written", "claims_extracted",
+        "claim_verified", "claim_verified", "question_finished",
+    ]
+    verified = [e for e in sink.events if isinstance(e, ClaimVerified)]
+    assert [(e.position, e.total) for e in verified] == [(1, 2), (2, 2)]
+    # each stage's full output is in its event, including what the judge read
+    assert verified[0].verdict.evidence == [PASSAGE]
+    assert next(e for e in sink.events if isinstance(e, DraftWritten)).draft.text == "Draft answer [a.pdf]."
+    assert all(e.run_id == run.run_id and e.pipeline == "answering" for e in sink.events)
+
+
+def test_indexing_emits_one_event_per_stage(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingest, "setup_db", lambda conn: None)
+    monkeypatch.setattr(ingest, "store_chunks", lambda conn, chunks: None)
+    doc = Document(doc_id="d", filename="a.pdf", source_type="peer_reviewed_paper", text="x y z")
+
+    class FakeLoader:
+        def load(self, corpus_dir):
+            return [doc]
+
+    class FakeChunker:
+        def chunk(self, documents):
+            return [Chunk(chunk_id="d_0000", doc_id="d", filename="a.pdf",
+                          source_type="peer_reviewed_paper", chunk_index=0, text="x y z")]
+
+    sink = ListSink()
+    run = Run("indexing", sinks=[sink], runs_dir=tmp_path)
+    stages = IndexingStages(loader=FakeLoader(), chunker=FakeChunker(), embedder=FakeEmbedder())
+    ingest.run_indexing(stages, Path("corpus"), None, run, load_settings(CONFIG))
+
+    assert [e.type for e in sink.events] == [
+        "run_started", "documents_loaded", "chunks_built", "chunks_embedded", "chunks_stored",
+        "run_finished",
+    ]
+    assert sink.events[1].documents[0].characters == 5
+    assert sink.events[2].chunks[0].embedding is None  # vectors are not saved in events
+    assert sink.events[3].dimension == 2
+
+
+def test_recorded_events_reload_identically(tmp_path):
+    run = Run("answering", runs_dir=tmp_path, sinks=[])
+    run.sinks = [RecorderSink(run.events_path)]
+    run_single_question("Q?", answering_stages(), run)
+
+    lines = run.events_path.read_text(encoding="utf-8").splitlines()
+    reloaded = load_events(run.events_path)
+    assert len(lines) == len(reloaded) == 7
+    assert [e.model_dump_json() for e in reloaded] == lines
+
+
+def test_run_folder_is_named_after_its_id(tmp_path):
+    run = Run("indexing", sinks=[], runs_dir=tmp_path)
+    assert run.dir == tmp_path / run.run_id and run.dir.is_dir()
+    assert run.run_id.endswith("_indexing")
+
+
+def test_console_prints_one_short_line_per_answering_event(tmp_path, capsys):
+    run = Run("answering", sinks=[ConsoleSink()], runs_dir=tmp_path)
+    run_single_question("Q?", answering_stages(), run)
+    lines = [line for line in capsys.readouterr().out.splitlines() if line]
+    assert len(lines) == 7
+    assert lines[4].startswith("[verify 1/2] ✓ supported")

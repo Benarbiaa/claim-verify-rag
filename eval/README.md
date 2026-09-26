@@ -39,5 +39,5 @@ Tests **end to end**: 20 to 30 questions, each annotated with the verdict patter
 ## Planned runner
 
 `scripts/run_eval.py` (to write): loads `claims_gold.jsonl`, invokes `build_graph()` directly,
-scores against `expected`, and writes `reports/eval_<timestamp>.md`. Also useful for ablations:
+scores against `expected`, and writes its results in a run folder under `runs/`. Also useful for ablations:
 per-document vs. global retrieval, `top_k_per_doc` 2 vs. 3, and different LLMs.

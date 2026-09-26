@@ -74,6 +74,11 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [ ] PDF cleanup at ingest: strip the reference sections and fix hyphenated line breaks.
   Reference lists create noisy chunks that match many claims.
 
+- [ ] **Store runs in PostgreSQL** once the UI or the experiments need to query many runs
+  ("all contested verdicts from judge X", "verification time per model"): `runs` and `events`
+  tables with the event content in JSONB. It is one more event sink next to the file recorder
+  (`reporting.py`), so the orchestrators don't change.
+
 ## P3: Step G interface and deliverables
 
 - [ ] Minimal UI (Streamlit or Gradio): question → draft with claims highlighted by verdict →

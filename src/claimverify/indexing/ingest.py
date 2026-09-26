@@ -5,7 +5,9 @@ Pipeline d'indexation — Étape A
 Étapes : charger -> chunker -> embedder -> stocker (pgvector)
 Les implémentations et leurs réglages viennent de config.yaml (section
 indexing, et embedding qui est partagée avec le pipeline de réponse) ; ce
-fichier ne fait que les enchaîner, via leurs interfaces.
+fichier ne fait que les enchaîner, via leurs interfaces, et émet un
+événement après chaque étape (voir events.py) : une ligne dans le terminal,
+et la sortie complète dans runs/<run_id>/events.jsonl.
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.indexing.ingest --corpus_dir ./data/corpus
@@ -13,6 +15,7 @@ Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
 """
 
 import argparse
+import time
 from pathlib import Path
 
 import psycopg2
@@ -20,8 +23,50 @@ import psycopg2
 from claimverify.components.embedding import embed_chunks
 from claimverify.components.store import setup_db, store_chunks
 from claimverify.config import add_db_url_argument
-from claimverify.factory import build_indexing
-from claimverify.settings import add_config_argument, load_settings
+from claimverify.events import (
+    ChunksBuilt,
+    ChunksEmbedded,
+    ChunksStored,
+    DocumentsLoaded,
+    DocumentSummary,
+    RunFinished,
+    RunStarted,
+)
+from claimverify.factory import IndexingStages, build_indexing
+from claimverify.reporting import Run
+from claimverify.settings import Settings, add_config_argument, load_settings
+
+
+def run_indexing(stages: IndexingStages, corpus_dir: Path, conn, run: Run,
+                 settings: Settings) -> None:
+    start = time.perf_counter()
+    run.emit(RunStarted, config=settings.model_dump(), inputs={"corpus_dir": str(corpus_dir)})
+
+    t = time.perf_counter()
+    documents = stages.loader.load(corpus_dir)
+    run.emit(DocumentsLoaded, seconds=time.perf_counter() - t, documents=[
+        DocumentSummary(doc_id=d.doc_id, filename=d.filename, source_type=d.source_type,
+                        characters=len(d.text))
+        for d in documents
+    ])
+
+    t = time.perf_counter()
+    chunks = stages.chunker.chunk(documents)
+    run.emit(ChunksBuilt, chunks=chunks, seconds=time.perf_counter() - t)
+
+    t = time.perf_counter()
+    chunks = embed_chunks(chunks, stages.embedder)
+    run.emit(ChunksEmbedded, count=len(chunks), seconds=time.perf_counter() - t,
+             dimension=len(chunks[0].embedding) if chunks else 0)
+
+    t = time.perf_counter()
+    setup_db(conn)
+    store_chunks(conn, chunks)
+    run.emit(ChunksStored, count=len(chunks), seconds=time.perf_counter() - t)
+
+    run.emit(RunFinished, seconds=time.perf_counter() - start, summary={
+        "documents": len(documents), "chunks": len(chunks), "run_dir": str(run.dir),
+    })
 
 
 def main():
@@ -31,26 +76,13 @@ def main():
     add_config_argument(parser)
     args = parser.parse_args()
 
-    stages = build_indexing(load_settings(args.config))
-
-    print(f"Chargement du corpus depuis {args.corpus_dir}...")
-    documents = stages.loader.load(args.corpus_dir)
-    print(f"  {len(documents)} documents chargés : {[d.filename for d in documents]}")
-
-    print("Découpage en chunks...")
-    chunks = stages.chunker.chunk(documents)
-    print(f"  {len(chunks)} chunks générés")
-
-    print("Génération des embeddings...")
-    chunks = embed_chunks(chunks, stages.embedder)
-
-    print("Connexion à la base et stockage...")
+    settings = load_settings(args.config)
+    stages = build_indexing(settings)
     conn = psycopg2.connect(args.db_url)
-    setup_db(conn)
-    store_chunks(conn, chunks)
-    conn.close()
-
-    print("Terminé.")
+    try:
+        run_indexing(stages, args.corpus_dir, conn, Run("indexing"), settings)
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

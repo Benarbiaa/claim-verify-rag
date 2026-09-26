@@ -99,7 +99,7 @@ cp .env.example .env               # then set GROQ_API_KEY (the only required ke
 # 4. ingest the corpus
 make ingest
 
-# 5. ask a question: draft → claims → verdicts, report saved in reports/
+# 5. ask a question: draft → claims → verdicts, saved in runs/<run_id>/
 make run Q="Does semantic chunking improve retrieval performance compared to fixed-size chunking?"
 ```
 
@@ -123,6 +123,11 @@ python -m claimverify.answering.verification --debug_claim "..."   # inspect one
 
 Every script reads the database URL from `DB_URL` in `.env` and the pipeline settings from
 `config.yaml`. Pass `--db_url` or `--config` to point one run elsewhere.
+
+Each run of `indexing.ingest` or `answering.pipeline` prints one line per stage and gets its own
+folder, `runs/<run_id>/`: `events.jsonl` holds every stage's full output (retrieved passages,
+draft, claims, each verdict with the passages it was judged on), and answering runs add
+`report.json` and `report.md`. `claimverify.reporting.load_events` reads a run back.
 
 ## Status
 

@@ -13,6 +13,7 @@ dist/
 
 # pipeline outputs
 reports/
+runs/
 *.draft.txt
 claims*.json
 verdicts*.json
