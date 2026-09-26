@@ -37,7 +37,7 @@ to that file, not to the code. `.env` only holds secrets (API keys, `DB_URL`), s
 [`.env.example`](.env.example). For an experiment, copy `config.yaml` and pass
 `--config my_experiment.yaml` to any command.
 
-Design rationale: [`docs/architecture.md`](docs/architecture.md).
+Design, diagrams and the reason for each choice: [`docs/design.md`](docs/design.md).
 
 ## Corpus: a real disagreement, not a synthetic one
 
