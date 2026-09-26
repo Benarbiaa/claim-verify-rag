@@ -1,0 +1,188 @@
+@import 'tailwindcss';
+@import '@fontsource/atkinson-hyperlegible-next/400.css';
+@import '@fontsource/atkinson-hyperlegible-next/500.css';
+@import '@fontsource/atkinson-hyperlegible-next/700.css';
+@import '@fontsource/atkinson-hyperlegible-next/800.css';
+@import '@fontsource/atkinson-hyperlegible-mono/400.css';
+@import '@fontsource/atkinson-hyperlegible-mono/600.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Assay plate report. Paper, ink and hairlines; colour belongs to verdicts only.
+ * Verdict hues are Okabe-Ito (colour-blind safe), always paired with a shape and a label.
+ */
+:root {
+  color-scheme: light;
+  --paper: #f4f5f3;
+  --sheet: #ffffff;
+  --sheet-sunk: #eceeeb;
+  --ink: #15181c;
+  --ink-2: #454b53;
+  --ink-3: #636a73;
+  --rule: #dcdfe2;
+  --rule-strong: #b9bec5;
+  --focus: #0072b2;
+
+  --supported: #0072b2;
+  --supported-ink: #005a8c;
+  --supported-wash: #e3eff7;
+  --contradicted: #d55e00;
+  --contradicted-ink: #a84a00;
+  --contradicted-wash: #fbeadf;
+  --unverifiable: #8a9099;
+  --unverifiable-ink: #545b64;
+  --error: #e69f00;
+  --error-ink: #855b00;
+  --error-wash: #fbf1d9;
+  --hatch: color-mix(in oklab, var(--ink-3) 38%, transparent);
+
+  --shadow-lift: 0 1px 2px rgb(21 24 28 / 0.06), 0 8px 24px -8px rgb(21 24 28 / 0.14);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #0f1216;
+  --sheet: #161a1f;
+  --sheet-sunk: #1d2228;
+  --ink: #e9ebee;
+  --ink-2: #b3b9c1;
+  --ink-3: #8e96a0;
+  --rule: #2a3037;
+  --rule-strong: #414953;
+  --focus: #56b4e9;
+
+  --supported: #56b4e9;
+  --supported-ink: #7cc5ee;
+  --supported-wash: #16303f;
+  --contradicted: #ef7a2e;
+  --contradicted-ink: #f59a5e;
+  --contradicted-wash: #3a2419;
+  --unverifiable: #7d858f;
+  --unverifiable-ink: #a7aeb7;
+  --error: #f0b429;
+  --error-ink: #f5c75c;
+  --error-wash: #352a12;
+  --hatch: color-mix(in oklab, var(--ink-3) 42%, transparent);
+
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -10px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --font-sans: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, monospace;
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-sunk: var(--sheet-sunk);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-focus: var(--focus);
+  --color-supported: var(--supported);
+  --color-supported-ink: var(--supported-ink);
+  --color-supported-wash: var(--supported-wash);
+  --color-contradicted: var(--contradicted);
+  --color-contradicted-ink: var(--contradicted-ink);
+  --color-contradicted-wash: var(--contradicted-wash);
+  --color-unverifiable: var(--unverifiable);
+  --color-unverifiable-ink: var(--unverifiable-ink);
+  --color-error: var(--error);
+  --color-error-ink: var(--error-ink);
+  --color-error-wash: var(--error-wash);
+  --shadow-lift: var(--shadow-lift);
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+
+  /* the shadcn primitives read these */
+  --color-background: var(--sheet);
+  --color-foreground: var(--ink);
+  --color-popover: var(--sheet);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--sheet);
+  --color-muted: var(--sheet-sunk);
+  --color-muted-foreground: var(--ink-3);
+  --color-accent: var(--sheet-sunk);
+  --color-accent-foreground: var(--ink);
+  --color-border: var(--rule);
+  --color-input: var(--rule-strong);
+  --color-ring: var(--focus);
+}
+
+/* Type scales with the screen: readable from the back of a room on a projector. */
+html {
+  font-size: clamp(15px, 0.42vw + 9.6px, 18px);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'kern';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--supported) 28%, transparent);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+.figures {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* A hatch means "not there yet" (pending) or "waiting" on the time axis. */
+.hatch {
+  background-image: repeating-linear-gradient(135deg, var(--hatch) 0 1.5px, transparent 1.5px 6px);
+}
+
+.hatch-dense {
+  background-image: repeating-linear-gradient(135deg, var(--hatch) 0 1.5px, transparent 1.5px 4px);
+}
+
+/* Tooltips: a short scale-in from the trigger; instant once one is already open. */
+.tooltip-motion[data-state='delayed-open'] {
+  animation: tooltip-in 140ms var(--ease-out);
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
