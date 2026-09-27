@@ -30,7 +30,7 @@ export function DraftPanel({ state }: { state: AnsweringState }) {
   if (!draft)
     return (
       <>
-        <PanelHeading step="2" title="Answer" />
+        <PanelHeading step="2" stage="draft" title="Answer" />
         <Pending label="Writing…" />
       </>
     )
@@ -43,7 +43,7 @@ export function DraftPanel({ state }: { state: AnsweringState }) {
 
   return (
     <>
-      <PanelHeading step="2" title="Answer">
+      <PanelHeading step="2" stage="draft" title="Answer">
         Written from the passages. Click a source tag to read it.
       </PanelHeading>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">

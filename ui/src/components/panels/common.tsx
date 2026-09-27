@@ -1,13 +1,18 @@
+import { stageColor } from '@/lib/stages'
 import { cn } from '@/lib/utils'
 
-/** A panel's title says what the panel is for; `step` matches the step's number in the pipeline bar. */
+/** A panel's title says what the panel is for; `step` matches the step's number in the pipeline bar,
+ * and `stage` gives the number its step's colour. */
 export function PanelHeading({
   step,
+  stage,
   title,
   children,
   aside,
 }: {
   step?: string
+  /** two stages (e.g. "3–4") split the badge between their colours */
+  stage?: string | [string, string]
   title: string
   children?: React.ReactNode
   aside?: React.ReactNode
@@ -17,7 +22,14 @@ export function PanelHeading({
       <div className="max-w-[72ch]">
         <h2 className="flex items-center gap-2.5 text-xl font-extrabold tracking-[-0.02em] text-balance">
           {step && (
-            <span className="figures inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-ink px-2 text-sm text-sheet">
+            <span
+              className="figures inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-sm text-sheet"
+              style={{
+                background: Array.isArray(stage)
+                  ? `linear-gradient(90deg, ${stageColor(stage[0])} 50%, ${stageColor(stage[1])} 50%)`
+                  : stageColor(stage),
+              }}
+            >
               {step}
             </span>
           )}

@@ -54,7 +54,7 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
         <RunTimeline steps={steps} timeline={timeline} reached={timeline.total} focused={focus} onFocus={setFocus} />
       </div>
 
-      <PanelHeading title="Chunks">
+      <PanelHeading step="2" stage="chunk" title="Chunks">
         Each document is cut into pieces of about {chunker?.chunk_size ?? '?'} words. Click one to read it.
       </PanelHeading>
 

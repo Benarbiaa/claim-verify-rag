@@ -9,7 +9,7 @@ export function RetrievePanel({ state }: { state: AnsweringState }) {
   if (!state.passages)
     return (
       <>
-        <PanelHeading step="1" title="Passages found" />
+        <PanelHeading step="1" stage="retrieve" title="Passages found" />
         <Pending label="Searching…" />
       </>
     )
@@ -21,7 +21,7 @@ export function RetrievePanel({ state }: { state: AnsweringState }) {
 
   return (
     <>
-      <PanelHeading step="1" title="Passages found">
+      <PanelHeading step="1" stage="retrieve" title="Passages found">
         The best {k ?? 'k'} from each document, so every source is heard.
       </PanelHeading>
       <div className="grid gap-x-5 gap-y-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))' }}>

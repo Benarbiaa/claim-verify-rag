@@ -27,6 +27,14 @@ colors:
   dark-supported: "#56b4e9"
   dark-contradicted: "#ef7a2e"
   dark-error: "#f0b429"
+  stage-1: "oklch(0.5 0.09 195)"
+  stage-2: "oklch(0.5 0.12 145)"
+  stage-3: "oklch(0.49 0.16 295)"
+  stage-4: "oklch(0.5 0.17 345)"
+  dark-stage-1: "oklch(0.76 0.1 195)"
+  dark-stage-2: "oklch(0.76 0.13 145)"
+  dark-stage-3: "oklch(0.74 0.12 295)"
+  dark-stage-4: "oklch(0.74 0.14 345)"
 typography:
   question:
     fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
@@ -100,7 +108,7 @@ The pipeline's architecture is documented in [`docs/design.md`](docs/design.md).
 
 **Creative North Star: "The assay plate."** Each answer is treated like a lab sample. Every claim is tested against every source, and the result reads like a lab test plate being filled in.
 
-The page is a lab result sheet: cool paper, ink, hairline rules, and figures set in a monospace face. The verdicts are the only colour on the page. The UI is used in two situations: as a demo on a projector in a lit room or on a laptop across a table, and as an inspection tool for technical viewers. It has to read in five seconds and still hold up when someone looks closely.
+The page is a lab result sheet: cool paper, ink, hairline rules, and figures set in a monospace face. Colour has two jobs only: verdicts, and telling the pipeline steps apart. The UI is used in two situations: as a demo on a projector in a lit room or on a laptop across a table, and as an inspection tool for technical viewers. It has to read in five seconds and still hold up when someone looks closely.
 
 **Key characteristics:**
 - The plate (claims × sources) is the signature component. Each cell is a well that says what one source did with one claim.
@@ -111,7 +119,7 @@ The page is a lab result sheet: cool paper, ink, hairline rules, and figures set
 
 ## Colors
 
-The strategy is restrained: neutrals, plus a fixed palette of verdict colours taken from Okabe-Ito, a colour set designed to stay distinguishable for colour-blind viewers. Colour is never used alone. Every verdict also has a shape and a label.
+The strategy is restrained: neutrals, a fixed palette of verdict colours taken from Okabe-Ito (a colour set designed to stay distinguishable for colour-blind viewers), and four step colours. Colour is never used alone. Every verdict also has a shape and a label, and every step its number and name.
 
 ### Primary
 - **Supported blue** (`#0072B2`, dark `#56B4E9`): a filled circle, and sources that support a claim.
@@ -121,13 +129,23 @@ The strategy is restrained: neutrals, plus a fixed palette of verdict colours ta
 - **Error amber** (`#E69F00`, dark `#F0B429`): only for `error`, a hatched square. It is never used for warnings or flags.
 - **Unverifiable grey** (`#8A9099`): an empty ring with a question mark.
 
+### Steps
+One colour per pipeline step, in hues kept away from the verdicts' blue, vermillion and amber. The indexing steps reuse them in order (Load, Cut, Embed, Store).
+- **1 · Search** teal `oklch(0.5 0.09 195)`
+- **2 · Answer** green `oklch(0.5 0.12 145)`
+- **3 · Split** violet `oklch(0.49 0.16 295)`
+- **4 · Check** magenta `oklch(0.5 0.17 345)`
+- **Summary** stays ink.
+
+Dark theme: the same hues, lighter (lightness 0.74–0.76).
+
 ### Neutral
 - **Paper** `#F4F5F3` is the page. **Sheet** `#FFFFFF` is used for tables and panels. **Sunk** `#ECEEEB` is used for selected rows, passages and controls.
 - **Ink** `#15181C`, **Ink-2** `#454B53` (secondary text), **Ink-3** `#636A73` (captions, 4.8:1 contrast on white).
 - **Rule** `#DCDFE2` and **Rule-strong** `#B9BEC5` for hairlines and dashed outlines.
 
 ### Named rules
-**The verdict-only rule.** Colour belongs to verdicts. UI chrome, stages and buttons stay ink and grey. A flag that isn't a verdict (for example, "the judge relied on other sources") is written in ink, not in a verdict colour.
+**The two-jobs rule.** Colour belongs to verdicts and to pipeline steps. UI chrome and buttons stay ink and grey. Step colours mark where a step appears (its button, its time on the axis, its panel's number badge) and never fill a well: wells are verdicts. A flag that isn't a verdict (for example, "the judge relied on other sources") is written in ink, not in a verdict colour.
 
 **The contested rule.** Contested is not a colour of its own. It is the supported and contradicted colours together: a circle split diagonally.
 
@@ -188,7 +206,7 @@ A table with claims as rows and source documents as columns (sorted by relevance
 Selecting a row shows the claim card: the verdict, the claim, the reasoning (three lines, "Read more"), and For | Against lists of sources; clicking a source opens its passage.
 
 ### Time axis (signature)
-Five numbered step buttons (name + one count) sit above a 12 px bar: working is solid ink-2, waiting is hatched, what is still to come is ghosted, and a needle marks the current position. One line above the bar gives the total time, the share spent waiting, and a two-item legend.
+Five numbered step buttons (name + one count), each topped by a 3 px bar of its step colour, sit above a 12 px bar: working is solid in the step's colour, waiting is hatched in the step's colour, what is still to come is ghosted, and a needle marks the current position. One line above the bar gives the total time, the share spent waiting, and a two-item legend.
 
 ### Buttons
 - **Primary:** an ink fill with sheet-coloured text, 40 px tall (48 px on the intro), shrinks to 97% on press.
@@ -212,6 +230,7 @@ A sunk block with the passage text, clamped to a few lines; clicking it expands 
 
 **Don't**
 - Don't use the error amber for anything but `error`.
+- Don't put a step colour inside a well or on a verdict.
 - Don't add cards with icons and headings, stat tiles, or gradients.
 - Don't put small upper-case labels above headings.
 - Don't use monospace for prose.

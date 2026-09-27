@@ -9,7 +9,7 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /*
- * Assay plate report. Paper, ink and hairlines; colour belongs to verdicts only.
+ * Assay plate report. Paper, ink and hairlines; colour belongs to verdicts and pipeline steps.
  * Verdict hues are Okabe-Ito (colour-blind safe), always paired with a shape and a label.
  */
 :root {
@@ -36,6 +36,12 @@
   --error-ink: #855b00;
   --error-wash: #fbf1d9;
   --hatch: color-mix(in oklab, var(--ink-3) 38%, transparent);
+
+  /* Pipeline steps: hues kept away from the verdicts' blue, vermillion and amber. */
+  --stage-1: oklch(0.5 0.09 195);
+  --stage-2: oklch(0.5 0.12 145);
+  --stage-3: oklch(0.49 0.16 295);
+  --stage-4: oklch(0.5 0.17 345);
 
   --shadow-lift: 0 1px 2px rgb(21 24 28 / 0.06), 0 8px 24px -8px rgb(21 24 28 / 0.14);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -67,6 +73,11 @@
   --error-wash: #352a12;
   --hatch: color-mix(in oklab, var(--ink-3) 42%, transparent);
 
+  --stage-1: oklch(0.76 0.1 195);
+  --stage-2: oklch(0.76 0.13 145);
+  --stage-3: oklch(0.74 0.12 295);
+  --stage-4: oklch(0.74 0.14 345);
+
   --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -10px rgb(0 0 0 / 0.6);
 }
 
@@ -93,6 +104,10 @@
   --color-error: var(--error);
   --color-error-ink: var(--error-ink);
   --color-error-wash: var(--error-wash);
+  --color-stage-1: var(--stage-1);
+  --color-stage-2: var(--stage-2);
+  --color-stage-3: var(--stage-3);
+  --color-stage-4: var(--stage-4);
   --shadow-lift: var(--shadow-lift);
   --ease-out: var(--ease-out);
   --ease-in-out: var(--ease-in-out);

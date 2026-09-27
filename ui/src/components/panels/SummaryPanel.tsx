@@ -1,5 +1,6 @@
 import { type AnsweringState, modelsByRole, totalUsage } from '@/lib/answering'
 import { formatSeconds, formatTokens, plural } from '@/lib/format'
+import { ANSWERING_STAGES, stageColor, tint } from '@/lib/stages'
 import { type Timeline, sumSegments } from '@/lib/timeline'
 import { VERDICT_LABELS } from '@/lib/types'
 import { VERDICT_TEXT, VerdictMark } from '../verdict'
@@ -43,14 +44,32 @@ export function SummaryPanel({ state, timeline }: { state: AnsweringState; timel
 
         <Block title="Time">
           <p className="figures text-2xl font-extrabold">{formatSeconds(total)}</p>
+          <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-sunk" aria-hidden>
+            {ANSWERING_STAGES.flatMap(({ id }) => {
+              const work = sumSegments(timeline.segments, 'work', id)
+              const wait = sumSegments(timeline.segments, 'wait', id)
+              return [
+                <span key={`${id}-work`} style={{ width: `${(work / total) * 100}%`, background: stageColor(id) }} />,
+                wait > 0 && (
+                  <span
+                    key={`${id}-wait`}
+                    className="hatch"
+                    style={{ width: `${(wait / total) * 100}%`, '--hatch': tint(stageColor(id)) } as React.CSSProperties}
+                  />
+                ),
+              ]
+            })}
+          </div>
+          <ul className="figures mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm text-ink-2">
+            {ANSWERING_STAGES.map(({ id, label }) => (
+              <li key={id} className="flex items-center gap-1.5">
+                <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: stageColor(id) }} />
+                {label} {formatSeconds(sumSegments(timeline.segments, 'work', id) + sumSegments(timeline.segments, 'wait', id))}
+              </li>
+            ))}
+          </ul>
           {waited > 0 && (
-            <>
-              <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-sunk" aria-hidden>
-                <span className="bg-ink-2" style={{ width: `${((total - waited) / total) * 100}%` }} />
-                <span className="hatch flex-1" />
-              </div>
-              <p className="mt-1.5 text-sm text-ink-2">{Math.round((waited / total) * 100)}% spent waiting on the free tier's rate limit.</p>
-            </>
+            <p className="mt-1.5 text-sm text-ink-2">{Math.round((waited / total) * 100)}% spent waiting on the free tier's rate limit (hatched).</p>
           )}
           <p className="figures mt-2 text-sm text-ink-3">
             {plural(usage.calls, 'LLM call')} · {formatTokens(usage.tokens_in + usage.tokens_out)} tokens

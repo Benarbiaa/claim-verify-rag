@@ -24,7 +24,7 @@ export function PlatePanel({ state, selected, onSelect, judging }: Props) {
   if (!claims)
     return (
       <>
-        <PanelHeading step="3" title="Fact-check" />
+        <PanelHeading step="3" stage="decompose" title="Fact-check" />
         <Pending label="Splitting the answer into claims…" />
       </>
     )
@@ -35,7 +35,7 @@ export function PlatePanel({ state, selected, onSelect, judging }: Props) {
 
   return (
     <>
-      <PanelHeading step="3–4" title="Fact-check" aside={<Legend />}>
+      <PanelHeading step="3–4" stage={['decompose', 'verify']} title="Fact-check" aside={<Legend />}>
         Each row is a claim from the answer, each column a source. Click a row to see why.
       </PanelHeading>
 

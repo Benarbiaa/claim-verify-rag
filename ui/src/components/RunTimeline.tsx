@@ -1,7 +1,8 @@
 // The pipeline steps, and under them one time axis for the whole run, drawn to scale:
-// solid = working, hatched = waiting on the provider's rate limit.
+// solid = working, hatched = waiting on the provider's rate limit. Each step has its own colour.
 
 import { formatSeconds } from '@/lib/format'
+import { stageColor, tint } from '@/lib/stages'
 import type { StageStatus } from '@/lib/answering'
 import type { Segment, Timeline } from '@/lib/timeline'
 import { cn } from '@/lib/utils'
@@ -29,11 +30,11 @@ interface Props {
 
 const pct = (x: number, total: number) => `${Math.max(0, Math.min(100, (x / total) * 100))}%`
 
-function StepMark({ status }: { status: StageStatus }) {
+function StepMark({ status, color }: { status: StageStatus; color: string }) {
   if (status === 'done')
     return (
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden className="shrink-0">
-        <circle cx="7" cy="7" r="6.5" fill="var(--ink)" />
+        <circle cx="7" cy="7" r="6.5" fill={color} />
         <path d="M4 7.2l2 2 4-4.3" fill="none" stroke="var(--sheet)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
@@ -46,10 +47,12 @@ function StepMark({ status }: { status: StageStatus }) {
   return (
     <span
       aria-hidden
-      className={cn(
-        'block size-3.5 shrink-0 rounded-full border',
-        status === 'active' ? 'hatch-dense border-ink-2' : 'border-dashed border-rule-strong',
-      )}
+      className={cn('block size-3.5 shrink-0 rounded-full border', status === 'active' ? 'hatch-dense' : 'border-dashed')}
+      style={
+        status === 'active'
+          ? ({ borderColor: color, '--hatch': tint(color) } as React.CSSProperties)
+          : { borderColor: tint(color, 45) }
+      }
     />
   )
 }
@@ -65,20 +68,28 @@ export function RunTimeline({ steps, timeline, reached, flight, focused, onFocus
     <div className="select-none">
       <nav aria-label="Pipeline steps">
         <ol className="grid gap-1" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
-          {steps.map((step, i) => (
+          {steps.map((step, i) => {
+            const color = stageColor(step.id)
+            return (
             <li key={step.id} className="min-w-0">
               <button
                 type="button"
                 onClick={() => onFocus(step.id)}
                 aria-current={focused === step.id ? 'step' : undefined}
                 className={cn(
-                  'flex w-full min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]',
-                  focused === step.id ? 'border-ink bg-sheet' : 'border-transparent hover:bg-sunk',
+                  'relative flex w-full min-w-0 items-start gap-2 overflow-hidden rounded-lg border px-2.5 pt-2.5 pb-2 text-left transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.98]',
+                  focused === step.id ? 'bg-sheet' : 'border-transparent hover:bg-sunk',
                   step.status === 'pending' && 'text-ink-3',
                 )}
+                style={focused === step.id ? { borderColor: color } : undefined}
               >
+                <span
+                  aria-hidden
+                  className={cn('absolute inset-x-0 top-0 h-[3px]', step.status === 'pending' && 'opacity-35')}
+                  style={{ background: color }}
+                />
                 <span className="mt-[3px]">
-                  <StepMark status={step.status} />
+                  <StepMark status={step.status} color={color} />
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-bold">
@@ -89,7 +100,8 @@ export function RunTimeline({ steps, timeline, reached, flight, focused, onFocus
                 </span>
               </button>
             </li>
-          ))}
+            )
+          })}
         </ol>
       </nav>
 
@@ -100,7 +112,12 @@ export function RunTimeline({ steps, timeline, reached, flight, focused, onFocus
         </span>
         <span className="flex items-center gap-3" aria-hidden>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-4 rounded-[2px] bg-ink-2" /> working
+            <span className="inline-flex h-2.5 w-4 overflow-hidden rounded-[2px]">
+              {[1, 2, 3, 4].map((n) => (
+                <span key={n} className="flex-1" style={{ background: `var(--stage-${n})` }} />
+              ))}
+            </span>{' '}
+            working
           </span>
           <span className="flex items-center gap-1.5">
             <span className="hatch inline-block h-2.5 w-4 rounded-[2px] bg-sunk" /> waiting (rate limit)
@@ -126,12 +143,13 @@ function Track({ segments, total, ghost }: { segments: Segment[]; total: number;
       {segments.map((s, i) => (
         <span
           key={i}
-          className={cn(
-            'absolute inset-y-0',
-            s.kind === 'wait' ? 'hatch' : ghost ? 'bg-rule' : 'bg-ink-2',
-            ghost && s.kind === 'wait' && 'opacity-50',
-          )}
-          style={{ left: pct(s.start, total), width: `max(1.5px, ${pct(s.end - s.start, total)})` }}
+          className={cn('absolute inset-y-0', s.kind === 'wait' ? 'hatch' : ghost && 'bg-rule', ghost && s.kind === 'wait' && 'opacity-50')}
+          style={{
+            left: pct(s.start, total),
+            width: `max(1.5px, ${pct(s.end - s.start, total)})`,
+            ...(s.kind === 'work' && !ghost && { background: stageColor(s.stage) }),
+            ...(s.kind === 'wait' && !ghost && ({ '--hatch': tint(stageColor(s.stage)) } as React.CSSProperties)),
+          }}
         />
       ))}
     </div>
