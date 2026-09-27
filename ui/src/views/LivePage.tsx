@@ -75,10 +75,7 @@ export function LivePage() {
         }}
       >
         <h1 className="text-2xl font-extrabold tracking-[-0.025em]">Ask the corpus a question</h1>
-        <p className="mt-1 text-ink-2 text-pretty">
-          This runs the real pipeline: retrieval on your database, then the drafter, the decomposer and the judge through the API.
-          The page follows each stage as it finishes.
-        </p>
+        <p className="mt-1 text-ink-2">Runs the real pipeline and shows each step as it happens.</p>
 
         <label htmlFor="question" className="mt-6 block text-sm font-bold">
           Question
@@ -88,10 +85,9 @@ export function LivePage() {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           rows={3}
-          placeholder="e.g. Does semantic chunking improve retrieval performance?"
+          placeholder="Ask in English, e.g. Does semantic chunking improve retrieval?"
           className="mt-1.5 w-full resize-y rounded-lg border border-rule-strong bg-sheet px-3 py-2.5 text-[1.05rem] leading-snug text-ink placeholder:text-ink-3 focus:border-focus focus:outline-none focus-visible:outline-2"
         />
-        <p className="mt-2 text-xs text-ink-3">The corpus and prompts are in English: ask in English.</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {EXAMPLES.map((q) => (
             <button
@@ -120,11 +116,6 @@ export function LivePage() {
             </option>
           ))}
         </select>
-        {config?.models && (
-          <p className="figures mt-1.5 text-xs text-ink-3">
-            draft {config.models.draft} · decompose {config.models.decompose} · judge {config.models.verify}
-          </p>
-        )}
 
         {blockers.length > 0 && (
           <ul className="mt-4 space-y-1.5 rounded-lg bg-error-wash px-4 py-3 text-sm text-ink">
@@ -166,34 +157,21 @@ export function LivePage() {
       <aside aria-labelledby="cost" className="self-start rounded-lg border border-rule bg-sheet p-5">
         <h2 id="cost" className="flex items-center gap-2 text-base font-extrabold">
           <Coins className="size-4 text-ink-3" aria-hidden />
-          What it costs
+          Cost of one question
         </h2>
-        <dl className="mt-3 space-y-3 text-sm">
+        <dl className="mt-3 space-y-3">
           <div>
-            <dt className="text-ink-3">Tokens per question</dt>
-            <dd className="figures text-xl font-semibold">~{formatInt(estimate.tokens_per_question)}</dd>
-            <dd className="text-xs text-ink-3">
-              {estimate.basis_runs
-                ? `Average of ${estimate.basis_runs} recorded run${estimate.basis_runs > 1 ? 's' : ''}; most of it is the judge (one call per claim).`
-                : 'Rough estimate: no recorded run to measure yet.'}
-            </dd>
+            <dt className="text-sm text-ink-3">Tokens</dt>
+            <dd className="figures text-xl font-bold">~{formatInt(estimate.tokens_per_question)}</dd>
           </div>
           {typicalSeconds != null && (
             <div>
-              <dt className="text-ink-3">Typical duration</dt>
-              <dd className="figures text-xl font-semibold">{formatSeconds(typicalSeconds)}</dd>
-              <dd className="text-xs text-ink-3">Mostly waiting on the per-minute rate limit. Waits are shown live with a countdown.</dd>
+              <dt className="text-sm text-ink-3">Time</dt>
+              <dd className="figures text-xl font-bold">~{formatSeconds(typicalSeconds)}</dd>
             </div>
           )}
-          <div>
-            <dt className="text-ink-3">Daily limit</dt>
-            <dd className="text-sm text-ink-2">{estimate.daily_limit_note}</dd>
-          </div>
         </dl>
-        <p className="mt-4 border-t border-rule pt-3 text-xs text-ink-3 text-pretty">
-          If the provider asks to wait longer than the config's max_wait_seconds (a daily limit), or a request is too large, the
-          run stops with an explanation. Everything done until then is recorded.
-        </p>
+        <p className="mt-3 border-t border-rule pt-3 text-sm text-ink-3">{estimate.daily_limit_note}</p>
       </aside>
     </div>
   )

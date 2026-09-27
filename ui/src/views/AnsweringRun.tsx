@@ -3,12 +3,12 @@
 
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
-import { type AnsweringState, type StageId, type StageStatus, buildAnsweringState, questionEvents } from '@/lib/answering'
-import { formatRunDate, formatSeconds, formatTokens, plural } from '@/lib/format'
+import { type AnsweringState, type StageId, buildAnsweringState, questionEvents } from '@/lib/answering'
+import { formatRunDate, formatSeconds, plural } from '@/lib/format'
 import type { LiveFailure, LiveStatus } from '@/lib/live'
 import type { Replay } from '@/lib/replay'
 import { type Timeline, buildTimeline } from '@/lib/timeline'
-import type { PipelineEvent, RunSummary, VerdictLabel } from '@/lib/types'
+import type { PipelineEvent, RunSummary } from '@/lib/types'
 import { RunTimeline, type Step } from '@/components/RunTimeline'
 import { Transport } from '@/components/Transport'
 import { DraftPanel } from '@/components/panels/DraftPanel'
@@ -17,7 +17,7 @@ import { PlatePanel } from '@/components/panels/PlatePanel'
 import { RetrievePanel } from '@/components/panels/RetrievePanel'
 import { SummaryPanel } from '@/components/panels/SummaryPanel'
 import { LiveBanner } from '@/components/LiveBanner'
-import { FixtureNote } from '@/components/FixtureNote'
+import { FixtureTag } from '@/components/FixtureNote'
 
 type Panel = 'intro' | 'retrieve' | 'draft' | 'plate' | 'summary'
 
@@ -78,13 +78,7 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
   const followClaim = judging && state.claims ? state.claims[judging - 1]?.id : state.finished ? mostTelling(state) : latestVerdict?.verdict.claim_id
   const selectedClaim = manualClaim ?? followClaim ?? null
 
-  const steps = buildSteps(state, fullTimeline, live?.status === 'failed')
-  const landed = useMemo(() => {
-    const t = buildTimeline(shownForQuestion, 'answering')
-    return shownForQuestion.flatMap((e, i) =>
-      e.type === 'claim_verified' ? [{ at: t.offsets[i], verdict: e.verdict.verdict as VerdictLabel, position: e.position }] : [],
-    )
-  }, [shownForQuestion])
+  const steps = buildSteps(state, live?.status === 'failed')
 
   const question = state.question ?? summary.questions?.[questionIndex - 1] ?? state.questions[questionIndex - 1] ?? 'Answering run'
   const nowLine = describeNow(state, flight, live)
@@ -94,11 +88,9 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
       <header className="mb-3 flex flex-wrap items-start justify-between gap-x-8 gap-y-2">
         <div className="min-w-0 max-w-[80ch]">
           <h1 className="text-[clamp(1.25rem,0.95rem+0.95vw,1.9rem)] leading-tight [@media(max-height:760px)]:text-[1.35rem] font-extrabold tracking-[-0.025em] text-balance">{question}</h1>
-          <p className="figures mt-1 flex flex-wrap gap-x-3 text-xs text-ink-3">
-            <span>{formatRunDate(summary.run_id)}</span>
-            {state.configFile && <span>{state.configFile}</span>}
-            <span>{summary.run_id}</span>
-            {live && <span className="font-sans font-bold text-ink-2">live run</span>}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-ink-3">
+            {live ? 'Live run' : 'Recorded run'} · {formatRunDate(summary.run_id)}
+            {summary.source === 'fixture' && <FixtureTag />}
           </p>
         </div>
         {state.questions.length > 1 && (
@@ -119,23 +111,20 @@ export function AnsweringRun({ summary, events, replay, live }: Props) {
         )}
       </header>
 
-      {summary.source === 'fixture' && <FixtureNote />}
-
-      <div className="z-20 -mx-4 mb-5 border-b border-rule bg-paper/95 px-4 pt-1 pb-2 backdrop-blur-sm sm:-mx-6 sm:px-6 [@media(min-height:860px)_and_(min-width:1024px)]:sticky [@media(min-height:860px)_and_(min-width:1024px)]:top-12">
+      <div className="z-20 -mx-4 mb-6 border-b border-rule bg-paper/95 px-4 pt-2 pb-2 backdrop-blur-sm sm:-mx-6 sm:px-6 [@media(min-height:860px)_and_(min-width:1024px)]:sticky [@media(min-height:860px)_and_(min-width:1024px)]:top-12">
         {replay ? <Transport replay={replay} events={events} /> : live && <LiveBanner status={live.status} failure={live.failure} />}
-        <div className="mt-1.5">
+        <div className="mt-3">
           <RunTimeline
             steps={steps}
             timeline={timeline}
             reached={reached}
             flight={flight}
-            landed={landed}
             focused={STEP_OF_PANEL[panel]}
             onFocus={(id) => setManualPanel(PANEL_OF_STEP[id as StageId])}
             open={!!live && live.status === 'running'}
           />
         </div>
-        <p className="min-h-5 text-sm text-ink-2" aria-live="polite">
+        <p className="mt-1.5 min-h-5 text-sm font-semibold text-ink-2" aria-live="polite">
           {nowLine}
         </p>
       </div>
@@ -247,31 +236,29 @@ function describeNow(
     const wait = flight.gap >= 1 ? <WaitNote seconds={flight.gap} /> : null
     switch (e.type) {
       case 'passages_retrieved':
-        return 'Searching every document for passages about the question…'
+        return 'Searching the documents…'
       case 'draft_written':
-        return <>Writing the draft from the passages…{wait}</>
+        return <>Writing an answer…{wait}</>
       case 'claims_extracted':
-        return <>Splitting the draft into claims…{wait}</>
+        return <>Splitting the answer into claims…{wait}</>
       case 'claim_verified':
         return (
           <>
-            Judging claim {e.position} of {e.total} against every source…{wait}
+            Checking claim {e.position} of {e.total}…{wait}
           </>
         )
       case 'llm_waiting':
-        return <>The {e.role === 'verify' ? 'judge' : e.role} hit the provider's rate limit.</>
-      case 'question_finished':
-        return 'Finishing…'
+        return 'Rate limit reached: waiting…'
       default:
         return null
     }
   }
   if (live?.status === 'running' && !state.finished) {
     if (state.pendingWait) return <LiveWait key={state.pendingWait.at} wait={state.pendingWait} />
-    if (!state.passages) return 'Searching every document for passages about the question…'
-    if (!state.draft) return 'Writing the draft…'
-    if (!state.claims) return 'Splitting the draft into claims…'
-    return `Judging claim ${verified + 1} of ${n} against every source…`
+    if (!state.passages) return 'Searching the documents…'
+    if (!state.draft) return 'Writing an answer…'
+    if (!state.claims) return 'Splitting the answer into claims…'
+    return `Checking claim ${verified + 1} of ${n}…`
   }
   if (state.finished) return `Done: ${plural(n, 'claim')} checked.`
   return null
@@ -279,9 +266,8 @@ function describeNow(
 
 function WaitNote({ seconds }: { seconds: number }) {
   return (
-    <span className="ml-2 inline-flex items-center gap-1.5 text-ink-3">
-      <span className="hatch inline-block h-2.5 w-5 rounded-[2px] bg-sunk" aria-hidden />
-      includes {formatSeconds(seconds)} waiting on the rate limit (sped up)
+    <span className="ml-2 font-normal text-ink-3">
+      (waited {formatSeconds(seconds)}, sped up)
     </span>
   )
 }
@@ -306,57 +292,17 @@ function LiveWait({ wait }: { wait: NonNullable<AnsweringState['pendingWait']> }
   )
 }
 
-function buildSteps(state: AnsweringState, timeline: Timeline, failed: boolean): Step[] {
-  const s = (id: StageId) => state.stages.find((x) => x.id === id)!
-  const tokens = (id: StageId) => {
-    const u = s(id).usage
-    return u.calls ? `${formatTokens(u.tokens_in + u.tokens_out)} tok` : ''
-  }
-  const waitNote = (id: StageId) => {
-    const u = s(id).usage
-    return u.retries ? `${plural(u.retries, 'retry', 'retries')} · ${formatSeconds(u.waited_seconds)} waiting` : undefined
-  }
-  const done = (id: StageId) => s(id).status === 'done'
+function buildSteps(state: AnsweringState, failed: boolean): Step[] {
+  const status = (id: StageId) => state.stages.find((x) => x.id === id)!.status
   const verified = Object.keys(state.verdicts).length
   const n = state.claims?.length
-  return [
-    {
-      id: 'retrieve',
-      label: 'Retrieve',
-      status: s('retrieve').status,
-      figures: done('retrieve') ? [formatSeconds(s('retrieve').seconds), `${state.passages?.length} passages`] : [],
-      span: 'retrieve',
-    },
-    {
-      id: 'draft',
-      label: 'Draft',
-      status: s('draft').status,
-      figures: done('draft') ? [formatSeconds(s('draft').seconds), tokens('draft')] : [],
-      note: waitNote('draft'),
-      span: 'draft',
-    },
-    {
-      id: 'decompose',
-      label: 'Decompose',
-      status: s('decompose').status,
-      figures: done('decompose') ? [formatSeconds(s('decompose').seconds), `${n} claims`] : [],
-      note: waitNote('decompose'),
-      span: 'decompose',
-    },
-    {
-      id: 'verify',
-      label: n ? `Verify ${verified}/${n}` : 'Verify',
-      status: s('verify').status,
-      figures: verified ? [formatSeconds(s('verify').seconds), tokens('verify')] : [],
-      note: waitNote('verify'),
-      span: 'verify',
-    },
-    {
-      id: 'done',
-      label: 'Done',
-      status: (state.finished ? 'done' : 'pending') as StageStatus,
-      figures: state.finished ? [formatSeconds(state.questionSeconds ?? timeline.total), 'summary'] : [],
-      span: 'end',
-    },
-  ].map((step) => (failed && step.status === 'active' ? { ...step, status: 'failed' as const } : step))
+  const words = state.draft?.text.split(/\s+/).filter(Boolean).length
+  const steps: Step[] = [
+    { id: 'retrieve', label: 'Search', status: status('retrieve'), figure: state.passages && plural(state.passages.length, 'passage') },
+    { id: 'draft', label: 'Answer', status: status('draft'), figure: words ? `${words} words` : undefined },
+    { id: 'decompose', label: 'Split', status: status('decompose'), figure: n != null ? plural(n, 'claim') : undefined },
+    { id: 'verify', label: 'Check', status: status('verify'), figure: n ? `${verified}/${n} checked` : undefined },
+    { id: 'done', label: 'Summary', status: state.finished ? 'done' : 'pending', figure: state.finished ? 'results' : undefined },
+  ]
+  return steps.map((step) => (failed && step.status === 'active' ? { ...step, status: 'failed' as const } : step))
 }

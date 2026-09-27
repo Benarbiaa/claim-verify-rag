@@ -20,7 +20,6 @@ export function LiveBanner({ status, failure }: { status: LiveStatus; failure: L
         <div className="text-sm">
           <p className="font-bold text-ink">{FAILURE_TITLE[failure.kind] ?? 'The run stopped'}</p>
           <p className="mt-0.5 text-ink-2">{failure.message}</p>
-          <p className="mt-1 text-ink-3">Everything up to this point is recorded and can be replayed from the runs list.</p>
         </div>
       </div>
     )
@@ -35,8 +34,8 @@ export function LiveBanner({ status, failure }: { status: LiveStatus; failure: L
         <Loader2 className="size-4 animate-spin" aria-hidden />
       )}
       {status === 'connecting' && 'Connecting to the run…'}
-      {status === 'running' && 'Live: the page updates as each stage finishes.'}
-      {status === 'finished' && 'Finished. The run is recorded and can be replayed without API calls.'}
+      {status === 'running' && 'Live run in progress'}
+      {status === 'finished' && 'Finished. Saved in the runs list.'}
       {lost && (
         <>
           The server no longer knows this run (it may have restarted).{' '}

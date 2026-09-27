@@ -152,9 +152,7 @@ a {
 }
 
 .figures {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 /* A hatch means "not there yet" (pending) or "waiting" on the time axis. */

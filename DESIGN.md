@@ -46,11 +46,10 @@ typography:
     fontWeight: 400
     lineHeight: 1.625
   figures:
-    fontFamily: "Atkinson Hyperlegible Mono, ui-monospace, monospace"
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: "-0.01em"
 rounded:
   cell: "6px"
   control: "8px"
@@ -137,7 +136,7 @@ The strategy is restrained: neutrals, plus a fixed palette of verdict colours ta
 ## Typography
 
 **Body and display:** Atkinson Hyperlegible Next, a font built to stay readable for people with low vision, which suits a room with a projector.
-**Figures:** Atkinson Hyperlegible Mono, used only for measurements: seconds, tokens, scores, IDs and file names.
+**Figures:** the same face with tabular numbers. Monospace (Atkinson Hyperlegible Mono) appears only in the "Technical details" dump.
 
 The root size scales with the viewport, from 15 px at 1280 px wide to 18 px at 1920 px.
 
@@ -146,10 +145,12 @@ The root size scales with the viewport, from 15 px at 1280 px wide to 18 px at 1
 - **Panel title** (800, 1.25 rem): one per focused stage.
 - **Section heading** (700–800, 1 rem).
 - **Body** (400, 0.875–1.05 rem, line-height 1.6–1.7): justifications, passages and the draft, capped at about 70 characters per line.
-- **Figures** (mono 0.7–0.75 rem, tabular numerals): step figures, axis ticks, scores.
+- **Figures** (0.75 rem, tabular numerals): step counts, times.
 
 ### Named rules
-**The measurement rule.** Monospace means the text is a measurement or an identifier. It is never used just to look technical.
+**The one-line rule.** A panel has a title that says what it is for, and at most one line of explanation. Anything longer (the judge's reasoning, a passage) is clamped and opens on click.
+
+**Plain words.** Steps are named Search, Answer, Split, Check and Summary. Panel titles carry the same step number.
 
 **No eyebrows.** Headings stand on their own, with no small upper-case labels above them.
 
@@ -174,37 +175,37 @@ The design is flat and uses hairlines. The only shadow is `--shadow-lift`, a sof
 
 ## Components
 
-### Plate (signature)
-A table with claims as rows and source documents as columns (sorted by relevance). Each row starts with the claim's verdict well, then the claim text and "draft cited *X*". Each cell is a 32 px well:
+### Fact-check grid (signature)
+A table with claims as rows and source documents as columns (sorted by relevance). Each row starts with the claim's verdict well, then the claim text. Each cell is a 28 px empty well that may hold one mark:
 
-| Cell mark | Meaning |
+| Cell | Meaning |
 |---|---|
-| blue circle | the source supports the claim |
+| blue dot | the source supports the claim |
 | vermillion diamond | the source contradicts the claim |
-| small grey ring | the judge read it; it says nothing about the claim |
-| dash | not retrieved for this claim |
-| hatched | not judged yet |
+| empty | the source says nothing about it |
+| hatched | not checked yet |
 
-A square frame marks the source the draft cited. Selecting a row opens the claim detail: the verdict, the judge's reasoning, For | Against columns of evidence passages, and the silent passages, folded.
+Selecting a row shows the claim card: the verdict, the claim, the reasoning (three lines, "Read more"), and For | Against lists of sources; clicking a source opens its passage.
 
 ### Time axis (signature)
-Pipeline steps sit above the axis. The axis is a 20 px track: work is drawn solid in ink-2, waits are hatched, and ghost segments show what is still to come. A vertical needle marks the current position. Verdict marks drop onto the axis at the moment each verdict was given, and a single leader line joins the focused step to its part of the axis.
+Five numbered step buttons (name + one count) sit above a 12 px bar: working is solid ink-2, waiting is hatched, what is still to come is ghosted, and a needle marks the current position. One line above the bar gives the total time, the share spent waiting, and a two-item legend.
 
 ### Buttons
 - **Primary:** an ink fill with sheet-coloured text, 40 px tall (48 px on the intro), shrinks to 97% on press.
 - **Segmented controls** (speed, filters): a sunk track with the active item raised on a sheet background.
 
-### Citation chip
-Inline in the draft: the short name of the source and `#chunk`. When selected, it turns supported-wash with a supported border, and the matching passage is highlighted in the side list.
+### Source tag
+Inline in the answer: the source's short name. Clicking it shows that passage in the side column.
 
 ### Passage
-A sunk block showing the document's short name, the chunk number and a score bar (fixed scale from 0.5 to 1). The text is clamped to 3–5 lines and can be expanded.
+A sunk block with the passage text, clamped to a few lines; clicking it expands it.
 
 ## Do's and Don'ts
 
 **Do**
 - Pair every verdict colour with its shape and its label.
-- Draw durations to scale on the shared axis, waits included.
+- Draw durations to scale on the shared bar, waits included.
+- Keep one title and at most one line of explanation per panel.
 - Show pending states as hatched.
 - Keep supporting sources on the left and contradicting sources on the right.
 - Keep motion short: under 300 ms, a strong ease-out, and a spring only for the landing of a verdict well. Nothing moves when reduced motion is on.
