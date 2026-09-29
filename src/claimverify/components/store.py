@@ -34,15 +34,13 @@ def setup_db(conn):
                 embedding VECTOR({EMBEDDING_DIM})
             );
         """)
-        # Index approximatif pour la recherche par similarité (IVFFlat).
-        # À créer après avoir inséré des données pour de meilleures perfs
-        # (nécessite un minimum de lignes pour être efficace, mais fonctionne
-        # aussi bien pour un petit corpus de test).
-        cur.execute("""
-            CREATE INDEX IF NOT EXISTS chunks_embedding_idx
-            ON chunks USING ivfflat (embedding vector_cosine_ops)
-            WITH (lists = 10);
-        """)
+        # Pas d'index vectoriel : recherche exacte. À quelques centaines de
+        # chunks, comparer la requête à chaque ligne prend quelques ms.
+        # L'ancien index IVFFlat (créé sur une table vide, 1 seule liste
+        # parcourue) faisait disparaître des documents entiers de
+        # search_per_document, le filtre filename étant appliqué après la
+        # recherche approximative. On le supprime des bases existantes.
+        cur.execute("DROP INDEX IF EXISTS chunks_embedding_idx;")
     conn.commit()
 
 

@@ -569,6 +569,7 @@ gave identical results.
 | **One shared embedder** | `build_answering` | questions and claims must be embedded like the chunks |
 | **Each provider gets only its own key** | `api_key_env` | the Groq key is never sent to Gemini |
 | **LangGraph step limit raised** | `LangGraphVerifier.verify` | the default (25 steps) crashed answers with more than 12 claims |
+| **Exact vector search, no index** | `setup_db` | a few ms at this size; an IVFFlat index built on an empty table dropped whole documents from per-document search |
 | **Re-ingest replaces each document's rows** | `store_chunks` | no leftover chunks when the chunking changes |
 | **Warning on old `.env` model variables** | `load_settings` | ignored variables must not mislead |
 | **Stage outputs as JSON files** | stage CLIs `--save_to`, `--save_json` | run one stage alone; compare judges on the *same* claims |
@@ -589,7 +590,6 @@ gave identical results.
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
 | Q4 | claims about the corpus instead of facts ("both papers say…") | decomposer | decomposer prompt |
 | Q5 | chunks of ~800 tokens: the embedder only reads 512 | chunker | token-based chunking (400 tokens) |
-| - | IVFFlat index built on an empty table | store | exact search (no index needed at this size) |
 | - | reference lists and hyphenated words in PDFs | loader | PDF cleanup |
 
 (Q2, a citation with an old filename, is fixed.)

@@ -15,15 +15,20 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## P0: correctness (fix one at a time, re-run `make check` after each)
 
-- [ ] **P0-1. IVFFlat index built on an empty table.** `setup_db()` creates the
-  `ivfflat (lists = 10)` index *before* inserting rows, so the cluster centroids are
-  meaningless. pgvector also searches only one list by default (`ivfflat.probes = 1`), and the
+- [x] **P0-1. IVFFlat index built on an empty table.** `setup_db()` created the
+  `ivfflat (lists = 10)` index *before* inserting rows, so the cluster centroids were
+  meaningless. pgvector searches only one list by default (`ivfflat.probes = 1`), and the
   `WHERE filename = …` filter in `search_per_document` is applied *after* the approximate
-  search. Result: a per-document search can return fewer than k chunks, or the wrong ones. This
-  is a likely cause of the false "unverifiable" verdicts.
-  *Fix:* at this corpus size (a few hundred chunks), drop the index and use exact search, or
-  switch to HNSW and set `hnsw.ef_search`.
-  *Check:* for a few claims, compare `--debug_claim` output with and without the index.
+  search.
+  *Measured (no LLM call):* with 57 rows, Postgres never used the index: it read every row
+  (exact search), so the recorded runs were not affected (15 queries, 91/91 passages identical to
+  an exact search). Forcing the index, the chunking question lost LumberChunker and Anthropic
+  entirely (5 passages instead of 9). The planner would have switched to the index on its own as
+  the table grew.
+  *Fix:* `setup_db()` drops the index; search is exact. Checked: same 15 queries, same passages,
+  order and scores as before, and no index to use even with `enable_seqscan = off`.
+  *Consequence:* this was not the cause of the false "unverifiable" verdicts. The one in the
+  recorded run (c11) is a claim about the draft itself, a decomposition issue (Q4 in design.md).
 
 - [ ] **P0-2. Chunks are measured in words, but the embedder limit is 512 tokens.** 512
   whitespace words is likely more than 512 WordPiece tokens for academic PDF text, and
