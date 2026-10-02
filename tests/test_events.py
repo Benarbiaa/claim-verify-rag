@@ -58,7 +58,7 @@ def test_answering_emits_one_event_per_stage_and_per_verdict(tmp_path):
 
 def test_indexing_emits_one_event_per_stage(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest, "setup_db", lambda conn: None)
-    monkeypatch.setattr(ingest, "store_chunks", lambda conn, chunks: None)
+    monkeypatch.setattr(ingest, "replace_chunks", lambda conn, chunks: None)
     doc = Document(doc_id="d", filename="a.pdf", source_type="peer_reviewed_paper", text="x y z")
 
     class FakeLoader:

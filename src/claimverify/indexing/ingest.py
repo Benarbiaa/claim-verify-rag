@@ -21,7 +21,7 @@ from pathlib import Path
 import psycopg2
 
 from claimverify.components.embedding import embed_chunks
-from claimverify.components.store import setup_db, store_chunks
+from claimverify.components.store import replace_chunks, setup_db
 from claimverify.config import add_db_url_argument
 from claimverify.events import (
     ChunksBuilt,
@@ -61,7 +61,7 @@ def run_indexing(stages: IndexingStages, corpus_dir: Path, conn, run: Run,
 
     t = time.perf_counter()
     setup_db(conn)
-    store_chunks(conn, chunks)
+    replace_chunks(conn, chunks)
     run.emit(ChunksStored, count=len(chunks), seconds=time.perf_counter() - t)
 
     run.emit(RunFinished, seconds=time.perf_counter() - start, summary={

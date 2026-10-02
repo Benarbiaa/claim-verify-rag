@@ -11,6 +11,5 @@ case a line break in the name, which break on Windows and in many tools.
 | `anthropic-contextual-retrieval.md` | Introducing Contextual Retrieval | Anthropic engineering blog, 2024 | Different axis (chunk enrichment): tests "complementary" vs "contradicts" |
 
 The `filename` column in the `chunks` table (and therefore every citation in drafts and
-verdicts) uses these new names. Drop the table and re-ingest after pulling this change
-(`make db-reset ingest`), otherwise old and new rows will coexist and each paper will be
-retrieved twice.
+verdicts) uses these new names. Re-ingest after pulling this change: ingest replaces the
+whole table, so the old names disappear.

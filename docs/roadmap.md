@@ -42,8 +42,12 @@ them before building the eval baseline**, or the numbers you report will be skew
   tying each verdict to its sources. Unusable judge answers are now `error` instead of a fake
   `unverifiable`, and each verdict records the passages it was judged on.
 
-- [ ] **P0-4. Re-ingest after the corpus rename.** `make db-reset ingest`. See
-  `data/corpus/SOURCES.md`.
+- [x] **P0-4. Re-ingest after the corpus rename.** Ingest used to upsert rows by `chunk_id`
+  and never delete, so a removed or renamed file kept its rows. `replace_chunks` now replaces
+  the whole table in one transaction (and refuses an empty chunk list). `SOURCES.md` moved to
+  `data/info/`: it had been ingested as a fifth source and took one slot in every search.
+  Re-ingested: 56 chunks from 4 documents; apart from `SOURCES.md`, the 15 baseline queries
+  return the same passages.
 
 - [ ] **P0-5. Housekeeping.** `requirements.txt` pins unused packages (anthropic, google-*,
   Spark, …); regenerate it from the direct dependencies in `pyproject.toml`. (Done along the

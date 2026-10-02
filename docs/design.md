@@ -333,7 +333,7 @@ sequenceDiagram
     O->>E: embed_texts
     E-->>O: vectors (new Chunk objects)
     O->>O: emit chunks_embedded
-    O->>DB: setup_db + store_chunks (replaces each document's rows)
+    O->>DB: setup_db + replace_chunks (the table becomes exactly this corpus)
     O->>O: emit chunks_stored, run_finished
 ```
 
@@ -570,7 +570,7 @@ gave identical results.
 | **Each provider gets only its own key** | `api_key_env` | the Groq key is never sent to Gemini |
 | **LangGraph step limit raised** | `LangGraphVerifier.verify` | the default (25 steps) crashed answers with more than 12 claims |
 | **Exact vector search, no index** | `setup_db` | a few ms at this size; an IVFFlat index built on an empty table dropped whole documents from per-document search |
-| **Re-ingest replaces each document's rows** | `store_chunks` | no leftover chunks when the chunking changes |
+| **Ingest replaces the whole table, in one transaction** | `replace_chunks` | no leftover rows from a removed or renamed file, or from the old chunking; a failed ingest leaves the old table intact |
 | **Warning on old `.env` model variables** | `load_settings` | ignored variables must not mislead |
 | **Stage outputs as JSON files** | stage CLIs `--save_to`, `--save_json` | run one stage alone; compare judges on the *same* claims |
 | **Config stored in every report and run** | `report.json`, `run_started` | any result can be reproduced |
@@ -586,13 +586,12 @@ gave identical results.
 
 | # | Issue | Stage | Planned fix |
 |---|---|---|---|
-| Q1 | `SOURCES.md` is ingested and used as evidence | loader | skip non-corpus files |
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
 | Q4 | claims about the corpus instead of facts ("both papers say…") | decomposer | decomposer prompt |
 | Q5 | chunks of ~800 tokens: the embedder only reads 512 | chunker | token-based chunking (400 tokens) |
 | - | reference lists and hyphenated words in PDFs | loader | PDF cleanup |
 
-(Q2, a citation with an old filename, is fixed.)
+(Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old filename.)
 
 **Next:** the quality fixes above, one stage at a time; then evaluation (gold set, metrics,
 ablations) and the UI. Details and priorities: [`roadmap.md`](roadmap.md).

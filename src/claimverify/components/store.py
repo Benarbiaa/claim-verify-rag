@@ -2,7 +2,7 @@
 Stockage vectoriel pgvector — composant partagé par les deux pipelines
 ========================================================================
 
-L'indexation écrit les chunks (setup_db, store_chunks), la réponse les
+L'indexation écrit les chunks (setup_db, replace_chunks), la réponse les
 recherche (search_global, search_per_document). Tout le SQL est ici :
 changer de base vectorielle ne toucherait que ce module.
 
@@ -44,29 +44,38 @@ def setup_db(conn):
     conn.commit()
 
 
-def store_chunks(conn, chunks: list[Chunk]):
-    # Vérifié avant de toucher la base : un chunk sans embedding vient d'une
-    # étape d'embedding sautée ou défaillante, c'est elle qu'il faut signaler.
+def replace_chunks(conn, chunks: list[Chunk]):
+    """Remplace TOUT le contenu de la table par ces chunks : après une
+    indexation, la table contient exactement le corpus indexé. Sinon les
+    lignes d'un fichier retiré ou renommé, ou les derniers chunks d'un
+    document qui en produit moins qu'avant, resteraient cherchables."""
+    # Vérifiés avant de toucher la base. Liste vide : mauvais --corpus_dir
+    # ou dossier vide, on viderait la table pour rien.
+    if not chunks:
+        raise ValueError("Aucun chunk à stocker : vérifier --corpus_dir. La table n'est pas modifiée.")
+    # Un chunk sans embedding vient d'une étape d'embedding sautée ou
+    # défaillante, c'est elle qu'il faut signaler.
     missing = [c.chunk_id for c in chunks if c.embedding is None]
     if missing:
         raise ValueError(
             f"{len(missing)} chunk(s) sans embedding (ex. {missing[0]}) : "
-            "lancer embed_chunks avant store_chunks."
+            "lancer embed_chunks avant replace_chunks."
         )
 
     rows = [
         (c.chunk_id, c.doc_id, c.filename, c.source_type, c.chunk_index, c.text, c.embedding)
         for c in chunks
     ]
+    # DELETE et INSERT dans une seule transaction (un seul commit) : en cas
+    # d'échec, Postgres annule tout et l'ancienne table reste intacte ; une
+    # recherche pendant l'indexation voit l'ancienne table complète.
     with conn.cursor() as cur:
+        cur.execute("DELETE FROM chunks;")
         execute_values(
             cur,
             """
             INSERT INTO chunks (chunk_id, doc_id, filename, source_type, chunk_index, text, embedding)
-            VALUES %s
-            ON CONFLICT (chunk_id) DO UPDATE SET
-                text = EXCLUDED.text,
-                embedding = EXCLUDED.embedding;
+            VALUES %s;
             """,
             rows,
         )

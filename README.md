@@ -51,7 +51,7 @@ fixed-size chunking?
 | `lewis-rag-neurips2020.pdf` | Lewis et al., NeurIPS 2020 | Original RAG paper: clean baseline claims |
 | `anthropic-contextual-retrieval.md` | Anthropic blog, 2024 | Complementary technique: must *not* be flagged as a contradiction |
 
-Full titles: [`data/corpus/SOURCES.md`](data/corpus/SOURCES.md).
+Full titles: [`data/info/SOURCES.md`](data/info/SOURCES.md).
 
 ## Repository layout
 
@@ -111,7 +111,6 @@ Other commands (`make help`):
 |---|---|
 | `make check Q="..."` | Show the retrieved chunks, no LLM calls |
 | `make batch QUESTIONS=eval/smoke_questions.txt` | Run several questions, aggregate report |
-| `make db-reset` | Drop the `chunks` table (before re-ingesting) |
 | `make test` | Unit tests |
 
 Each stage also runs on its own:
