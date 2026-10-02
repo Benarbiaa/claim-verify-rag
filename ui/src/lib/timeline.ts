@@ -33,6 +33,7 @@ const ANSWERING_STAGE: Partial<Record<PipelineEvent['type'], string>> = {
 
 const INDEXING_STAGE: Partial<Record<PipelineEvent['type'], string>> = {
   documents_loaded: 'load',
+  documents_cleaned: 'clean',
   chunks_built: 'chunk',
   chunks_embedded: 'embed',
   chunks_stored: 'store',

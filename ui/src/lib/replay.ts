@@ -19,6 +19,7 @@ const DWELL_MS: Partial<Record<PipelineEvent['type'], number>> = {
   claims_extracted: 1800,
   claim_verified: 350,
   documents_loaded: 1200,
+  documents_cleaned: 1200,
   chunks_built: 1200,
 }
 
@@ -119,6 +120,8 @@ export function describeCue(e: PipelineEvent | undefined): string {
       return 'Run finished'
     case 'documents_loaded':
       return `${e.documents.length} documents loaded`
+    case 'documents_cleaned':
+      return `${e.documents.filter((d) => Object.values(d.changes).some(Boolean)).length} documents repaired`
     case 'chunks_built':
       return `${e.chunks.length} chunks built`
     case 'chunks_embedded':

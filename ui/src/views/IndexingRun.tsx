@@ -1,9 +1,10 @@
-// An indexing run: documents -> chunks -> embeddings -> stored, and a chunk explorer per document.
+// An indexing run: documents -> cleaned -> chunks -> embeddings -> stored, the repairs per document,
+// and a chunk explorer per document.
 
 import { useMemo, useState } from 'react'
 import { formatRunDate, plural, shortDoc } from '@/lib/format'
 import { buildTimeline } from '@/lib/timeline'
-import type { Chunk, EventOf, RunDetail } from '@/lib/types'
+import type { Chunk, CleaningSummary, EventOf, RunDetail } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { RunTimeline, type Step } from '@/components/RunTimeline'
 import { PanelHeading } from '@/components/panels/common'
@@ -16,10 +17,13 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
   const timeline = useMemo(() => buildTimeline(events, 'indexing'), [events])
   const started = find(events, 'run_started')
   const loaded = find(events, 'documents_loaded')
+  const cleaned = find(events, 'documents_cleaned')
   const built = find(events, 'chunks_built')
   const embedded = find(events, 'chunks_embedded')
   const stored = find(events, 'chunks_stored')
   const chunker = started?.config.indexing.chunker
+  // runs recorded before the cleaning step have neither the event nor the setting
+  const hasCleaning = Boolean(cleaned || started?.config.indexing.cleaner)
   const [focus, setFocus] = useState('chunk')
 
   const chunksByDoc = useMemo(() => {
@@ -34,6 +38,9 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
 
   const steps: Step[] = [
     { id: 'load', label: 'Load', status: loaded ? 'done' : 'pending', figure: loaded && plural(docs.length, 'document') },
+    ...(hasCleaning
+      ? [{ id: 'clean', label: 'Clean', status: cleaned ? 'done' : 'pending', figure: cleaned && `${repaired(cleaned.documents)} repaired` } satisfies Step]
+      : []),
     { id: 'chunk', label: 'Cut', status: built ? 'done' : 'pending', figure: built && plural(built.chunks.length, 'chunk') },
     { id: 'embed', label: 'Embed', status: embedded ? 'done' : 'pending', figure: embedded && 'into vectors' },
     { id: 'store', label: 'Store', status: stored ? 'done' : 'pending', figure: stored && 'in the database' },
@@ -54,7 +61,16 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
         <RunTimeline steps={steps} timeline={timeline} reached={timeline.total} focused={focus} onFocus={setFocus} />
       </div>
 
-      <PanelHeading step="2" stage="chunk" title="Chunks">
+      {cleaned && (
+        <section className="mb-8">
+          <PanelHeading step="2" stage="clean" title="Repairs">
+            PDF extraction artifacts fixed before cutting. No content is removed.
+          </PanelHeading>
+          <CleaningTable documents={cleaned.documents} />
+        </section>
+      )}
+
+      <PanelHeading step={hasCleaning ? '3' : '2'} stage="chunk" title="Chunks">
         Each document is cut into pieces of about {chunker?.chunk_size ?? '?'} words. Click one to read it.
       </PanelHeading>
 
@@ -106,6 +122,68 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
           </article>
         )}
       </div>
+    </div>
+  )
+}
+
+const repaired = (docs: CleaningSummary[]) =>
+  plural(docs.filter((d) => Object.values(d.changes).some(Boolean)).length, 'document')
+
+const RULES = [
+  { key: 'page_numbers', label: 'Page numbers removed' },
+  { key: 'nfkc', label: 'Characters normalized', hint: 'ﬁ → fi' },
+  { key: 'hyphens_joined', label: 'Split words rejoined', hint: 'rele-|vance → relevance' },
+  { key: 'hyphens_kept', label: 'Hyphen kept', hint: 'cross-|encoder → cross-encoder' },
+] as const
+
+function CleaningTable({ documents }: { documents: CleaningSummary[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-rule bg-sheet">
+      <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+        <thead>
+          <tr className="border-b border-rule text-xs text-ink-3">
+            <th scope="col" className="py-2.5 pl-4 pr-4 font-semibold">
+              Document
+            </th>
+            {RULES.map((r) => (
+              <th key={r.key} scope="col" className="py-2.5 pr-4 text-right font-semibold" title={'hint' in r ? r.hint : undefined}>
+                {r.label}
+              </th>
+            ))}
+            <th scope="col" className="py-2.5 pr-4 text-right font-semibold">
+              Characters
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {documents.map((d) => {
+            const untouched = !Object.values(d.changes).some(Boolean)
+            return (
+              <tr key={d.filename} className="border-b border-rule last:border-0">
+                <th scope="row" className="py-2.5 pl-4 pr-4 font-bold">
+                  {shortDoc(d.filename)}
+                </th>
+                {untouched ? (
+                  <td colSpan={RULES.length} className="py-2.5 pr-4 text-right text-ink-3">
+                    left as written
+                  </td>
+                ) : (
+                  RULES.map((r) => (
+                    <td key={r.key} className="figures py-2.5 pr-4 text-right">
+                      {d.changes[r.key] ?? 0}
+                    </td>
+                  ))
+                )}
+                <td className="figures py-2.5 pr-4 text-right whitespace-nowrap text-ink-3">
+                  {untouched
+                    ? d.characters_after.toLocaleString('en')
+                    : `${d.characters_before.toLocaleString('en')} → ${d.characters_after.toLocaleString('en')}`}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

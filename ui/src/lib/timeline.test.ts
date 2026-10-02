@@ -48,3 +48,23 @@ describe('replay pacing', () => {
     expect(cueDelay(offsets, events, draft + 1)).toBeGreaterThan(3000)
   })
 })
+
+describe('indexing timeline', () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 9, 2, 8, 0, s)).toISOString()
+  const base = { run_id: 'r', pipeline: 'indexing' as const }
+  const indexing = [
+    { ...base, time: at(0), type: 'run_started', config: {}, inputs: {} },
+    { ...base, time: at(1), type: 'documents_loaded', documents: [], seconds: 1 },
+    { ...base, time: at(2), type: 'documents_cleaned', documents: [], seconds: 1 },
+    { ...base, time: at(3), type: 'chunks_built', chunks: [], seconds: 1 },
+  ] as unknown as PipelineEvent[]
+
+  it('places the cleaning step between loading and cutting', () => {
+    expect(Object.keys(buildTimeline(indexing, 'indexing').spans)).toEqual(['load', 'clean', 'chunk'])
+  })
+
+  it('still reads runs recorded before the cleaning step', () => {
+    const old = indexing.filter((e) => e.type !== 'documents_cleaned')
+    expect(Object.keys(buildTimeline(old, 'indexing').spans)).toEqual(['load', 'chunk'])
+  })
+})

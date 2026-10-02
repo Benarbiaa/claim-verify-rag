@@ -1,5 +1,6 @@
 // Each pipeline step has its own colour, reused wherever that step appears (steps, time axis,
-// panel titles). Indexing steps reuse the four colours in order. Summary stays ink.
+// panel titles). Indexing steps reuse the four colours in order; Clean shares Load's, as both
+// prepare the text. Summary stays ink.
 
 const SLOT: Record<string, 1 | 2 | 3 | 4> = {
   retrieve: 1,
@@ -7,6 +8,7 @@ const SLOT: Record<string, 1 | 2 | 3 | 4> = {
   decompose: 3,
   verify: 4,
   load: 1,
+  clean: 1,
   chunk: 2,
   embed: 3,
   store: 4,
