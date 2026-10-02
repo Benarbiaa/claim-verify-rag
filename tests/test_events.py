@@ -11,6 +11,7 @@ from claimverify.contracts import Chunk, Document
 from claimverify.events import ClaimVerified, DraftWritten, LLMWaiting
 from claimverify.factory import AnsweringStages, IndexingStages
 from claimverify.indexing import ingest
+from claimverify.indexing.cleaning import MinimalCleaner
 from claimverify.reporting import ConsoleSink, RecorderSink, Run, load_events
 from claimverify.settings import load_settings
 from fakes import fake_llm
@@ -59,7 +60,7 @@ def test_answering_emits_one_event_per_stage_and_per_verdict(tmp_path):
 def test_indexing_emits_one_event_per_stage(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest, "setup_db", lambda conn: None)
     monkeypatch.setattr(ingest, "replace_chunks", lambda conn, chunks: None)
-    doc = Document(doc_id="d", filename="a.pdf", source_type="peer_reviewed_paper", text="x y z")
+    doc = Document(doc_id="d", filename="a.pdf", source_type="peer_reviewed_paper", text="x\ty z\n1")
 
     class FakeLoader:
         def load(self, corpus_dir):
@@ -72,16 +73,21 @@ def test_indexing_emits_one_event_per_stage(tmp_path, monkeypatch):
 
     sink = ListSink()
     run = Run("indexing", sinks=[sink], runs_dir=tmp_path)
-    stages = IndexingStages(loader=FakeLoader(), chunker=FakeChunker(), embedder=FakeEmbedder())
+    stages = IndexingStages(loader=FakeLoader(), cleaner=MinimalCleaner(), chunker=FakeChunker(),
+                            embedder=FakeEmbedder())
     ingest.run_indexing(stages, Path("corpus"), None, run, load_settings(CONFIG))
 
     assert [e.type for e in sink.events] == [
-        "run_started", "documents_loaded", "chunks_built", "chunks_embedded", "chunks_stored",
-        "run_finished",
+        "run_started", "documents_loaded", "documents_cleaned", "chunks_built", "chunks_embedded",
+        "chunks_stored", "run_finished",
     ]
-    assert sink.events[1].documents[0].characters == 5
-    assert sink.events[2].chunks[0].embedding is None  # vectors are not saved in events
-    assert sink.events[3].dimension == 2
+    assert sink.events[1].documents[0].characters == 7
+    # page number removed, tab collapsed: the summary says what changed, without the text
+    cleaned = sink.events[2].documents[0]
+    assert (cleaned.characters_before, cleaned.characters_after) == (7, 5)
+    assert cleaned.changes["page_numbers"] == 1
+    assert sink.events[3].chunks[0].embedding is None  # vectors are not saved in events
+    assert sink.events[4].dimension == 2
 
 
 def test_recorded_events_reload_identically(tmp_path):
@@ -107,6 +113,17 @@ def test_console_prints_one_short_line_per_answering_event(tmp_path, capsys):
     lines = [line for line in capsys.readouterr().out.splitlines() if line]
     assert len(lines) == 7
     assert lines[4].startswith("[verify 1/2] ✓ supported")
+
+
+def test_console_summarizes_the_cleaning_in_one_line():
+    from claimverify.events import CleaningSummary, DocumentsCleaned
+    event = DocumentsCleaned(run_id="r", pipeline="indexing", seconds=0.1, documents=[
+        CleaningSummary(filename="a.pdf", characters_before=9, characters_after=8,
+                        changes={"page_numbers": 2, "hyphens_joined": 3}),
+        CleaningSummary(filename="b.md", characters_before=5, characters_after=5, changes={}),
+    ])
+    assert ConsoleSink.describe(event) == (
+        "[clean] 1 of 2 documents repaired: page numbers 2, hyphens joined 3 (0.1s)")
 
 
 def test_stage_events_carry_their_llm_usage(tmp_path):

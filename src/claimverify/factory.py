@@ -19,6 +19,7 @@ from claimverify.answering.retrieval import PgvectorRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.indexing.chunking import Chunker, FixedSizeChunker
+from claimverify.indexing.cleaning import Cleaner, MinimalCleaner, NoCleaner
 from claimverify.indexing.loading import FileLoader, Loader
 from claimverify.llm import LLM, RetryPolicy, UsageMeter, make_llm
 from claimverify.settings import LLMStageSettings, RetrieverSettings, Settings
@@ -29,6 +30,10 @@ from claimverify.settings import LLMStageSettings, RetrieverSettings, Settings
 
 LOADERS = {
     "files": lambda cfg: FileLoader(),
+}
+CLEANERS = {
+    "minimal": lambda cfg: MinimalCleaner(),
+    "none": lambda cfg: NoCleaner(),
 }
 CHUNKERS = {
     "fixed_size": lambda cfg: FixedSizeChunker(cfg.chunk_size, cfg.overlap_ratio),
@@ -85,6 +90,11 @@ def build_loader(settings: Settings) -> Loader:
     return _pick(LOADERS, cfg.type, "indexing.loader")(cfg)
 
 
+def build_cleaner(settings: Settings) -> Cleaner:
+    cfg = settings.indexing.cleaner
+    return _pick(CLEANERS, cfg.type, "indexing.cleaner")(cfg)
+
+
 def build_chunker(settings: Settings) -> Chunker:
     cfg = settings.indexing.chunker
     return _pick(CHUNKERS, cfg.type, "indexing.chunker")(cfg)
@@ -126,6 +136,7 @@ def build_verifier(settings: Settings, embedder: Embedder, conn,
 @dataclass
 class IndexingStages:
     loader: Loader
+    cleaner: Cleaner
     chunker: Chunker
     embedder: Embedder
 
@@ -144,6 +155,7 @@ class AnsweringStages:
 def build_indexing(settings: Settings, embedder: Embedder | None = None) -> IndexingStages:
     return IndexingStages(
         loader=build_loader(settings),
+        cleaner=build_cleaner(settings),
         chunker=build_chunker(settings),
         embedder=embedder or build_embedder(settings),
     )

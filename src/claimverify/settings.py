@@ -70,6 +70,10 @@ class LoaderSettings(_Strict):
     type: Literal["files"]
 
 
+class CleanerSettings(_Strict):
+    type: Literal["minimal", "none"]
+
+
 class ChunkerSettings(_Strict):
     type: Literal["fixed_size"]
     chunk_size: PositiveInt
@@ -89,6 +93,7 @@ class VerifierSettings(_Strict):
 
 class IndexingSettings(_Strict):
     loader: LoaderSettings
+    cleaner: CleanerSettings
     chunker: ChunkerSettings
 
 

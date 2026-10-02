@@ -27,6 +27,8 @@ embedding:                       # shared by both pipelines: chunks and queries 
 indexing:
   loader:
     type: files
+  cleaner:                       # minimal: repairs PDF extraction (page numbers, NFKC,
+    type: minimal                #   split words); none: raw text, for comparison
   chunker:
     type: fixed_size
     chunk_size: 512

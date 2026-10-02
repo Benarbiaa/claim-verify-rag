@@ -75,6 +75,20 @@ class DocumentsLoaded(Event):
     seconds: float
 
 
+class CleaningSummary(BaseModel):
+    """Ce que le nettoyage a changé dans un document (le texte n'est pas copié)."""
+    filename: str
+    characters_before: int
+    characters_after: int
+    changes: dict[str, int]  # règle -> nombre de réparations
+
+
+class DocumentsCleaned(Event):
+    type: Literal["documents_cleaned"] = "documents_cleaned"
+    documents: list[CleaningSummary]
+    seconds: float
+
+
 class ChunksBuilt(Event):
     type: Literal["chunks_built"] = "chunks_built"
     chunks: list[Chunk]  # sans vecteur : les vecteurs sont dans la base
@@ -157,7 +171,7 @@ class QuestionFinished(Event):
 
 AnyEvent = Annotated[
     RunStarted | RunFinished
-    | DocumentsLoaded | ChunksBuilt | ChunksEmbedded | ChunksStored
+    | DocumentsLoaded | DocumentsCleaned | ChunksBuilt | ChunksEmbedded | ChunksStored
     | QuestionStarted | PassagesRetrieved | DraftWritten | ClaimsExtracted | ClaimVerified
     | LLMWaiting | QuestionFinished,
     Field(discriminator="type"),

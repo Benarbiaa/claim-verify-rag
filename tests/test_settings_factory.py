@@ -16,6 +16,7 @@ from claimverify.answering.verification import LangGraphVerifier, LLMJudge
 from claimverify.components.embedding import BgeEmbedder
 from claimverify.factory import build_answering, build_indexing
 from claimverify.indexing.chunking import FixedSizeChunker
+from claimverify.indexing.cleaning import MinimalCleaner, NoCleaner
 from claimverify.indexing.loading import FileLoader
 from claimverify.settings import LEGACY_ENV_VARS, Settings, load_settings
 
@@ -86,9 +87,16 @@ def settings(monkeypatch):
 def test_build_indexing(settings):
     stages = build_indexing(settings)
     assert isinstance(stages.loader, FileLoader)
+    assert isinstance(stages.cleaner, MinimalCleaner)
     assert isinstance(stages.chunker, FixedSizeChunker)
     assert (stages.chunker.chunk_size, stages.chunker.overlap_ratio) == (512, 0.15)
     assert isinstance(stages.embedder, BgeEmbedder)
+
+
+def test_cleaning_can_be_turned_off_for_comparison(settings):
+    raw = settings.model_copy(deep=True)
+    raw.indexing.cleaner.type = "none"
+    assert isinstance(build_indexing(raw).cleaner, NoCleaner)
 
 
 def test_build_answering(settings):

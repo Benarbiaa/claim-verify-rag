@@ -14,6 +14,7 @@ Une interface (ou une base de données) sera un sink de plus, sans changer
 les orchestrateurs.
 """
 
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -49,6 +50,14 @@ class ConsoleSink:
             return f"[run] {event.run_id}"
         if t == "documents_loaded":
             return f"[load] {len(event.documents)} documents ({s})"
+        if t == "documents_cleaned":
+            changed = sum(1 for d in event.documents if any(d.changes.values()))
+            total = Counter()
+            for d in event.documents:
+                total.update(d.changes)
+            detail = ", ".join(f"{rule.replace('_', ' ')} {n}" for rule, n in total.items())
+            return (f"[clean] {changed} of {len(event.documents)} documents repaired"
+                    + (f": {detail}" if detail else "") + f" ({s})")
         if t == "chunks_built":
             return f"[chunk] {len(event.chunks)} chunks ({s})"
         if t == "chunks_embedded":

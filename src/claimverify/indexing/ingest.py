@@ -2,7 +2,7 @@
 Pipeline d'indexation — Étape A
 =================================
 
-Étapes : charger -> chunker -> embedder -> stocker (pgvector)
+Étapes : charger -> nettoyer -> chunker -> embedder -> stocker (pgvector)
 Les implémentations et leurs réglages viennent de config.yaml (section
 indexing, et embedding qui est partagée avec le pipeline de réponse) ; ce
 fichier ne fait que les enchaîner, via leurs interfaces, et émet un
@@ -27,6 +27,8 @@ from claimverify.events import (
     ChunksBuilt,
     ChunksEmbedded,
     ChunksStored,
+    CleaningSummary,
+    DocumentsCleaned,
     DocumentsLoaded,
     DocumentSummary,
     RunFinished,
@@ -48,6 +50,15 @@ def run_indexing(stages: IndexingStages, corpus_dir: Path, conn, run: Run,
         DocumentSummary(doc_id=d.doc_id, filename=d.filename, source_type=d.source_type,
                         characters=len(d.text))
         for d in documents
+    ])
+
+    t = time.perf_counter()
+    cleaned = stages.cleaner.clean(documents)
+    documents = [c.document for c in cleaned]
+    run.emit(DocumentsCleaned, seconds=time.perf_counter() - t, documents=[
+        CleaningSummary(filename=c.document.filename, characters_before=c.characters_before,
+                        characters_after=len(c.document.text), changes=c.changes)
+        for c in cleaned
     ])
 
     t = time.perf_counter()
