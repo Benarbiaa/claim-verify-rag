@@ -43,6 +43,12 @@ class BgeEmbedder:
         # Chargé au premier usage seulement : créer l'objet ne coûte rien.
         return SentenceTransformer(self.model_name, device=self.device)
 
+    def token_spans(self, text: str) -> list[tuple[int, int]]:
+        """Positions de chaque token de CE modèle dans le texte : le chunker
+        mesure avec le tokenizer qui lira les chunks (voir chunking.py)."""
+        return self.model.tokenizer(text, add_special_tokens=False,
+                                    return_offsets_mapping=True)["offset_mapping"]
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         embeddings = self.model.encode(texts, batch_size=32, show_progress_bar=True,
                                        normalize_embeddings=True)

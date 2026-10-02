@@ -91,6 +91,14 @@ def test_build_indexing(settings):
     assert isinstance(stages.chunker, FixedSizeChunker)
     assert (stages.chunker.chunk_size, stages.chunker.overlap_ratio) == (512, 0.15)
     assert isinstance(stages.embedder, BgeEmbedder)
+    # chunks are measured by the very model that will embed them
+    assert stages.chunker.tokenizer is stages.embedder
+
+
+def test_an_embedder_that_cannot_count_tokens_is_refused(settings):
+    from test_interfaces import FakeEmbedder
+    with pytest.raises(TypeError, match="token_spans"):
+        build_indexing(settings, embedder=FakeEmbedder())
 
 
 def test_cleaning_can_be_turned_off_for_comparison(settings):

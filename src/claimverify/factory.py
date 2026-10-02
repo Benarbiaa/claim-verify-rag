@@ -18,7 +18,7 @@ from claimverify.answering.drafting import Drafter, LLMDrafter
 from claimverify.answering.retrieval import PgvectorRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
-from claimverify.indexing.chunking import Chunker, FixedSizeChunker
+from claimverify.indexing.chunking import Chunker, FixedSizeChunker, Tokenizer
 from claimverify.indexing.cleaning import Cleaner, MinimalCleaner, NoCleaner
 from claimverify.indexing.loading import FileLoader, Loader
 from claimverify.llm import LLM, RetryPolicy, UsageMeter, make_llm
@@ -36,7 +36,7 @@ CLEANERS = {
     "none": lambda cfg: NoCleaner(),
 }
 CHUNKERS = {
-    "fixed_size": lambda cfg: FixedSizeChunker(cfg.chunk_size, cfg.overlap_ratio),
+    "fixed_size": lambda cfg, tokenizer: FixedSizeChunker(tokenizer, cfg.chunk_size, cfg.overlap_ratio),
 }
 EMBEDDERS = {
     "bge": lambda cfg: BgeEmbedder(cfg.model, cfg.device),
@@ -95,9 +95,9 @@ def build_cleaner(settings: Settings) -> Cleaner:
     return _pick(CLEANERS, cfg.type, "indexing.cleaner")(cfg)
 
 
-def build_chunker(settings: Settings) -> Chunker:
+def build_chunker(settings: Settings, tokenizer: Tokenizer) -> Chunker:
     cfg = settings.indexing.chunker
-    return _pick(CHUNKERS, cfg.type, "indexing.chunker")(cfg)
+    return _pick(CHUNKERS, cfg.type, "indexing.chunker")(cfg, tokenizer)
 
 
 def build_retriever(cfg: RetrieverSettings, embedder: Embedder, conn, stage: str) -> Retriever:
@@ -153,11 +153,17 @@ class AnsweringStages:
 
 
 def build_indexing(settings: Settings, embedder: Embedder | None = None) -> IndexingStages:
+    # Le chunker mesure avec l'embedder lui-même : les chunks sont comptés en
+    # tokens du modèle qui va les lire, sans réglage à garder synchronisé.
+    embedder = embedder or build_embedder(settings)
+    if not isinstance(embedder, Tokenizer):
+        raise TypeError(f"{type(embedder).__name__} ne fournit pas token_spans : "
+                        "le chunker ne peut pas compter ses tokens.")
     return IndexingStages(
         loader=build_loader(settings),
         cleaner=build_cleaner(settings),
-        chunker=build_chunker(settings),
-        embedder=embedder or build_embedder(settings),
+        chunker=build_chunker(settings, tokenizer=embedder),
+        embedder=embedder,
     )
 
 

@@ -1,38 +1,73 @@
+from itertools import pairwise
+
 import pytest
 
 from claimverify.components import store
 from claimverify.components.store import replace_chunks
 from claimverify.contracts import Chunk, Document
-from claimverify.indexing.chunking import build_chunks, chunk_text
+from claimverify.indexing.chunking import FixedSizeChunker, Tokenizer, token_windows
+from fakes import PieceTokenizer, WordTokenizer
 
 
-def test_short_text_is_single_chunk():
-    text = " ".join(f"w{i}" for i in range(100))
-    chunks = chunk_text(text, chunk_size=512, overlap_ratio=0.15)
-    assert chunks == [text]
+def doc(text: str) -> Document:
+    return Document(doc_id="abc123", filename="a.pdf", source_type="peer_reviewed_paper", text=text)
 
 
-def test_chunks_respect_size_and_overlap():
-    words = [f"w{i}" for i in range(1000)]
-    chunks = chunk_text(" ".join(words), chunk_size=100, overlap_ratio=0.2)
-    split = [c.split() for c in chunks]
+def words(n: int) -> str:
+    return " ".join(f"w{i}" for i in range(n))
+
+
+def test_the_fakes_are_tokenizers():
+    assert isinstance(WordTokenizer(), Tokenizer) and isinstance(PieceTokenizer(), Tokenizer)
+
+
+def test_short_text_is_a_single_chunk_kept_exactly_as_written():
+    text = "Semantic Chunking,\nrevisited:  a Study."
+    [c] = FixedSizeChunker(WordTokenizer(), chunk_size=400).chunk([doc(text)])
+    assert c.text == text and c.tokens == 5
+
+
+def test_windows_respect_size_and_overlap_and_lose_nothing():
+    text = words(1000)
+    chunks = FixedSizeChunker(WordTokenizer(), chunk_size=100, overlap_ratio=0.2).chunk([doc(text)])
+    split = [c.text.split() for c in chunks]
 
     assert all(len(c) <= 100 for c in split)
-    # consecutive chunks share exactly `overlap` words
-    for prev, nxt in zip(split, split[1:]):
+    assert [c.tokens for c in chunks] == [len(c) for c in split]
+    # consecutive chunks share exactly `overlap` tokens
+    for prev, nxt in pairwise(split):
         assert prev[-20:] == nxt[:20]
-    # nothing is lost at the end
-    assert split[-1][-1] == "w999"
+    # nothing is lost at either end
+    assert split[0][0] == "w0" and split[-1][-1] == "w999"
+
+
+def test_a_cut_never_falls_inside_a_word():
+    # "abcdefg" is 3 pieces (abc|def|g): a blind cut at 3 tokens would give "abc abcdef"
+    text = "abc abcdefg abc abcdefg abc"
+    chunks = FixedSizeChunker(PieceTokenizer(), chunk_size=3, overlap_ratio=0.0).chunk([doc(text)])
+
+    assert [c.text for c in chunks] == ["abc", "abcdefg", "abc", "abcdefg", "abc"]
+    assert all(c.tokens <= 3 for c in chunks)
+
+
+def test_a_word_longer_than_a_chunk_is_cut_at_the_limit():
+    # a URL or a long number has no blank to cut at: the limit wins
+    [first, second] = token_windows(PieceTokenizer().token_spans("x" * 18), chunk_size=4, overlap_ratio=0.0)
+    assert first == (0, 12, 4) and second == (12, 18, 2)
+
+
+def test_every_chunk_is_a_slice_of_the_original_text():
+    text = "First Line,\nsecond line.\n\n" * 40
+    chunks = FixedSizeChunker(PieceTokenizer(), chunk_size=25, overlap_ratio=0.15).chunk([doc(text)])
+    assert len(chunks) > 1 and all(c.text in text for c in chunks)
 
 
 def test_empty_text_gives_no_chunks():
-    assert chunk_text("") == []
+    assert FixedSizeChunker(WordTokenizer()).chunk([doc("")]) == []
 
 
-def test_build_chunks_turns_documents_into_chunks():
-    text = " ".join(f"w{i}" for i in range(1000))
-    doc = Document(doc_id="abc123", filename="a.pdf", source_type="peer_reviewed_paper", text=text)
-    chunks = build_chunks([doc])
+def test_chunks_get_ids_and_metadata_but_no_embedding():
+    chunks = FixedSizeChunker(WordTokenizer(), chunk_size=400).chunk([doc(words(1000))])
 
     assert all(isinstance(c, Chunk) for c in chunks)
     assert [c.chunk_id for c in chunks] == ["abc123_0000", "abc123_0001", "abc123_0002"]

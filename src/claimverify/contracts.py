@@ -65,6 +65,7 @@ class Chunk(BaseModel):
     source_type: str
     chunk_index: int
     text: str
+    tokens: int | None = None  # taille en tokens de l'embedder (absente des runs plus anciens)
     embedding: list[float] | None = None  # rempli par l'embedder
 
 

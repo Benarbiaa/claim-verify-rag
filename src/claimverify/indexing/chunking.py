@@ -2,16 +2,33 @@
 Chunking — Document vers Chunk
 ================================
 
-Taille fixe avec chevauchement (baseline volontairement simple).
+Taille fixe avec chevauchement (baseline volontairement simple), mesurée en
+tokens DU MODÈLE D'EMBEDDING : sa limite (512 pour bge) compte ses propres
+tokens, et un autre découpage (mots, tokenizer d'un LLM) donne d'autres
+nombres. Un chunk trop long serait tronqué sans erreur : sa fin ne serait
+jamais embeddée, alors que le LLM la lirait comme preuve.
+
+Le texte d'un chunk est découpé dans le texte original, aux positions des
+tokens : casse, ponctuation et retours à la ligne restent intacts. Une coupe
+tombe toujours sur un blanc, jamais au milieu d'un mot.
 """
 
-import re
 from typing import Protocol, runtime_checkable
 
 from claimverify.contracts import Chunk, Document
 
-CHUNK_SIZE_TOKENS = 512
+CHUNK_SIZE_TOKENS = 400
 CHUNK_OVERLAP_RATIO = 0.15  # 15%
+
+Span = tuple[int, int]  # début et fin d'un token dans le texte (positions de caractères)
+
+
+@runtime_checkable
+class Tokenizer(Protocol):
+    """Interface : où commence et finit chaque token d'un texte (sans tokens
+    spéciaux). BgeEmbedder la fournit : on compte avec le modèle qui embeddera."""
+
+    def token_spans(self, text: str) -> list[Span]: ...
 
 
 @runtime_checkable
@@ -22,54 +39,55 @@ class Chunker(Protocol):
 
 
 class FixedSizeChunker:
-    """Implémentation : fenêtres de taille fixe, avec chevauchement."""
+    """Implémentation : fenêtres de `chunk_size` tokens, avec chevauchement."""
 
-    def __init__(self, chunk_size: int = CHUNK_SIZE_TOKENS,
+    def __init__(self, tokenizer: Tokenizer, chunk_size: int = CHUNK_SIZE_TOKENS,
                  overlap_ratio: float = CHUNK_OVERLAP_RATIO):
+        self.tokenizer = tokenizer
         self.chunk_size = chunk_size
         self.overlap_ratio = overlap_ratio
 
     def chunk(self, documents: list[Document]) -> list[Chunk]:
-        return build_chunks(documents, self.chunk_size, self.overlap_ratio)
+        all_chunks = []
+        for doc in documents:
+            windows = token_windows(self.tokenizer.token_spans(doc.text),
+                                    self.chunk_size, self.overlap_ratio)
+            for i, (start, end, tokens) in enumerate(windows):
+                all_chunks.append(Chunk(
+                    chunk_id=f"{doc.doc_id}_{i:04d}",
+                    doc_id=doc.doc_id,
+                    filename=doc.filename,
+                    source_type=doc.source_type,
+                    chunk_index=i,
+                    text=doc.text[start:end],
+                    tokens=tokens,
+                ))
+        return all_chunks
 
 
-def simple_tokenize(text: str) -> list[str]:
-    # Découpage naïf par mots ; suffisant pour une baseline de chunking par
-    # nombre de tokens approximatif. À remplacer par un vrai tokenizer
-    # (ex. tiktoken) si besoin de précision.
-    return re.findall(r"\S+", text)
-
-
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE_TOKENS,
-               overlap_ratio: float = CHUNK_OVERLAP_RATIO) -> list[str]:
-    words = simple_tokenize(text)
+def token_windows(spans: list[Span], chunk_size: int,
+                  overlap_ratio: float) -> list[tuple[int, int, int]]:
+    """Fenêtres (début, fin en caractères, nombre de tokens) d'au plus
+    `chunk_size` tokens. Chaque fenêtre commence et finit sur une frontière
+    de mot (un blanc entre deux tokens), sauf un "mot" plus long que
+    `chunk_size` (une URL, une suite de chiffres), coupé à la limite."""
+    n = len(spans)
+    # Le token i commence un mot si un blanc le sépare du précédent.
+    word_start = [i == 0 or spans[i][0] > spans[i - 1][1] for i in range(n)]
     overlap = int(chunk_size * overlap_ratio)
-    step = chunk_size - overlap
 
-    chunks = []
-    for start in range(0, len(words), step):
-        chunk_words = words[start:start + chunk_size]
-        if not chunk_words:
+    windows, start = [], 0
+    while start < n:
+        end = min(start + chunk_size, n)
+        if end < n:
+            # Reculer jusqu'au début d'un mot, pour ne pas le couper en deux.
+            cut = next((j for j in range(end, start, -1) if word_start[j]), end)
+            end = cut
+        windows.append((spans[start][0], spans[end - 1][1], end - start))
+        if end == n:
             break
-        chunks.append(" ".join(chunk_words))
-        if start + chunk_size >= len(words):
-            break
-    return chunks
-
-
-def build_chunks(documents: list[Document], chunk_size: int = CHUNK_SIZE_TOKENS,
-                 overlap_ratio: float = CHUNK_OVERLAP_RATIO) -> list[Chunk]:
-    """Découpe chaque document en Chunk (sans embedding : c'est l'étape suivante)."""
-    all_chunks = []
-    for doc in documents:
-        pieces = chunk_text(doc.text, chunk_size, overlap_ratio)
-        for i, piece in enumerate(pieces):
-            all_chunks.append(Chunk(
-                chunk_id=f"{doc.doc_id}_{i:04d}",
-                doc_id=doc.doc_id,
-                filename=doc.filename,
-                source_type=doc.source_type,
-                chunk_index=i,
-                text=piece,
-            ))
-    return all_chunks
+        # La suivante reprend `overlap` tokens plus tôt, au début d'un mot ;
+        # elle avance toujours, même si la fenêtre est plus courte que l'overlap.
+        back = max(end - overlap, start + 1)
+        start = next((j for j in range(back, start, -1) if word_start[j]), back)
+    return windows

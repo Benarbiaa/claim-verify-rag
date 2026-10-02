@@ -42,3 +42,20 @@ def failing_llm(error: Exception, model: str = "fake-model") -> LLM:
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     return LLM(role="test", model=model, base_url="http://fake", client=client)
+
+
+class WordTokenizer:
+    """One token per whitespace-separated word, with its character positions."""
+
+    def token_spans(self, text: str) -> list[tuple[int, int]]:
+        import re
+        return [m.span() for m in re.finditer(r"\S+", text)]
+
+
+class PieceTokenizer:
+    """Cuts words into pieces of at most 3 characters, like WordPiece cuts rare words."""
+
+    def token_spans(self, text: str) -> list[tuple[int, int]]:
+        import re
+        return [(s, min(s + 3, m.end())) for m in re.finditer(r"\S+", text)
+                for s in range(m.start(), m.end(), 3)]

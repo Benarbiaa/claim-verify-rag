@@ -13,7 +13,7 @@ from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.contracts import Claim, Document, Draft, Passage, Verdict
 from claimverify.indexing.chunking import Chunker, FixedSizeChunker
 from claimverify.indexing.loading import FileLoader, Loader
-from fakes import fake_llm
+from fakes import WordTokenizer, fake_llm
 
 PASSAGE = Passage(filename="a.pdf", source_type="peer_reviewed_paper", chunk_index=0,
                   text="Evidence.", score=0.9)
@@ -81,7 +81,7 @@ def claims(n):
 
 def test_implementations_satisfy_their_interfaces():
     assert isinstance(FileLoader(), Loader)
-    assert isinstance(FixedSizeChunker(), Chunker)
+    assert isinstance(FixedSizeChunker(WordTokenizer()), Chunker)
     assert isinstance(BgeEmbedder(), Embedder)  # lazy: no model is loaded here
     assert isinstance(PgvectorRetriever(FakeEmbedder(), conn=None), Retriever)
     assert isinstance(LLMDrafter(fake_llm("x")), Drafter)
@@ -108,8 +108,8 @@ def test_file_loader_reads_markdown(tmp_path):
 def test_fixed_size_chunker_uses_its_settings():
     doc = Document(doc_id="d", filename="a.pdf", source_type="peer_reviewed_paper",
                    text=" ".join(f"w{i}" for i in range(100)))
-    chunks = FixedSizeChunker(chunk_size=50, overlap_ratio=0.0).chunk([doc])
-    assert [len(c.text.split()) for c in chunks] == [50, 50]
+    chunks = FixedSizeChunker(WordTokenizer(), chunk_size=50, overlap_ratio=0.0).chunk([doc])
+    assert [c.tokens for c in chunks] == [50, 50]
 
 
 def test_pgvector_retriever_searches_with_the_embedders_query_vector():
