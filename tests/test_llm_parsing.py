@@ -6,7 +6,7 @@ import pytest
 from openai import BadRequestError
 
 from claimverify.answering.decomposition import decompose_into_claims
-from claimverify.answering.verification import judge_with_llm, should_continue
+from claimverify.answering.verification import judge_with_llm, read_claims_file, should_continue
 from claimverify.contracts import Claim, Draft, Passage
 from fakes import failing_llm, fake_llm, provider_error
 
@@ -101,3 +101,13 @@ def test_json_mode_is_requested_for_structured_steps():
     call = llm.client.calls[0]
     assert call["model"] == "m"
     assert call["response_format"] == {"type": "json_object"}
+
+
+@pytest.mark.parametrize("content", [
+    {"claims": [{"id": "c1", "claim": "A"}]},   # what decomposition.py saves
+    [{"id": "c1", "claim": "A"}],               # a plain list of claims
+])
+def test_a_claims_file_is_read_in_both_formats(tmp_path, content):
+    path = tmp_path / "claims.json"
+    path.write_text(json.dumps(content), encoding="utf-8")
+    assert read_claims_file(str(path)) == [Claim(id="c1", claim="A")]

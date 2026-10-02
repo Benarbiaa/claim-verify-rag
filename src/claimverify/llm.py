@@ -24,7 +24,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cache
 
 import openai
 from openai import OpenAI
@@ -113,7 +113,7 @@ def _retry_after(error: openai.APIStatusError) -> float | None:
     return None
 
 
-@lru_cache(maxsize=None)
+@cache
 def _client(base_url: str, api_key: str, timeout: float) -> OpenAI:
     # Un client par (fournisseur, clé) : si deux rôles partagent le même
     # fournisseur, ils partagent le même client. max_retries=0 : c'est LLM.chat

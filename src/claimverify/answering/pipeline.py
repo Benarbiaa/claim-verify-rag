@@ -175,11 +175,11 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
             "",
             f"**Draft answer sources:** {', '.join(r['draft_answer_docs_covered'])}",
             "",
-            f"**Timings:** retrieval {r['timings']['retrieval_draft_seconds']}s · "
-            f"draft generation {r['timings']['generation_draft_seconds']}s · "
-            f"decomposition {r['timings']['decomposition_seconds']}s · "
-            f"verification {r['timings']['verification_seconds']}s · "
-            f"**total {r['timings']['total_seconds']}s**",
+            (f"**Timings:** retrieval {r['timings']['retrieval_draft_seconds']}s · "
+             f"draft generation {r['timings']['generation_draft_seconds']}s · "
+             f"decomposition {r['timings']['decomposition_seconds']}s · "
+             f"verification {r['timings']['verification_seconds']}s · "
+             f"**total {r['timings']['total_seconds']}s**"),
             "",
             "**Verdicts:** "
             + ", ".join(f"{r['verdict_counts'][label]} {label}" for label in VERDICT_LABELS)

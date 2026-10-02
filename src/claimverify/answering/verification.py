@@ -235,6 +235,15 @@ class LangGraphVerifier:
 # Point d'entrée
 # ---------------------------------------------------------------------------
 
+def read_claims_file(path: str) -> list[Claim]:
+    """Lit les claims d'un fichier JSON : la sortie de decomposition.py
+    ({"claims": [...]}) ou directement une liste de claims."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    raw = data["claims"] if isinstance(data, dict) else data
+    return [Claim.model_validate(c) for c in raw]
+
+
 def print_summary(verdicts: list[Verdict]):
     counts = dict.fromkeys(VERDICT_LABELS, 0)
     for v in verdicts:
@@ -284,10 +293,7 @@ def main():
     if not args.claims_file:
         raise RuntimeError("--claims_file est requis en dehors du mode --debug_claim.")
 
-    with open(args.claims_file, "r", encoding="utf-8") as f:
-        claims_data = json.load(f)
-    raw_claims = claims_data["claims"] if "claims" in claims_data else claims_data
-    claims = [Claim.model_validate(c) for c in raw_claims]
+    claims = read_claims_file(args.claims_file)
 
     verifier = build_verifier(settings, build_embedder(settings), conn)
     print(f"\nVérification de {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")
