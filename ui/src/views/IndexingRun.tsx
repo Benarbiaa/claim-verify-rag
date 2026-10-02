@@ -32,6 +32,9 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
     return map
   }, [built])
   const docs = loaded?.documents ?? []
+  // runs chunked before token-based chunking measured their chunks in words
+  const unit = built?.chunks.some((c) => c.tokens != null) ? 'token' : 'word'
+  const sizeOf = (c: Chunk) => c.tokens ?? c.text.split(/\s+/).length
   const [selected, setSelected] = useState<{ file: string; index: number } | null>(null)
   const current =
     (selected && chunksByDoc.get(selected.file)?.find((c) => c.chunk_index === selected.index)) ?? built?.chunks[0] ?? null
@@ -46,7 +49,7 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
     { id: 'store', label: 'Store', status: stored ? 'done' : 'pending', figure: stored && 'in the database' },
   ]
 
-  const overlapWords = chunker ? Math.floor(chunker.chunk_size * chunker.overlap_ratio) : 0
+  const overlap = chunker ? Math.floor(chunker.chunk_size * chunker.overlap_ratio) : 0
 
   return (
     <div className="mx-auto w-full max-w-[1760px] px-4 pt-5 pb-16 sm:px-6">
@@ -71,14 +74,14 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
       )}
 
       <PanelHeading step={hasCleaning ? '3' : '2'} stage="chunk" title="Chunks">
-        Each document is cut into pieces of about {chunker?.chunk_size ?? '?'} words. Click one to read it.
+        Each document is cut into pieces of about {chunker?.chunk_size ?? '?'} {unit}s, each sharing about {overlap}{' '}
+        with the next. Click one to read it.
       </PanelHeading>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           {docs.map((d) => {
             const chunks = chunksByDoc.get(d.filename) ?? []
-            const words = chunks.map((c) => c.text.split(/\s+/).length)
             return (
               <section key={d.doc_id} aria-label={d.filename}>
                 <h3 className="flex flex-wrap items-baseline gap-x-2">
@@ -86,7 +89,7 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
                   <span className="text-xs text-ink-3">{plural(chunks.length, 'chunk')}</span>
                 </h3>
                 <div className="mt-1.5 flex flex-wrap gap-1">
-                  {chunks.map((c, i) => {
+                  {chunks.map((c) => {
                     const active = current?.chunk_id === c.chunk_id
                     return (
                       <button
@@ -94,12 +97,12 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
                         type="button"
                         onClick={() => setSelected({ file: c.filename, index: c.chunk_index })}
                         aria-pressed={active}
-                        aria-label={`${shortDoc(c.filename)} chunk ${c.chunk_index}, ${words[i]} words`}
+                        aria-label={`${shortDoc(c.filename)} chunk ${c.chunk_index}, ${plural(sizeOf(c), unit)}`}
                         className={cn(
                           'figures h-8 rounded-[4px] text-[0.68rem] transition-[background-color,transform,color] duration-150 ease-out active:scale-[0.95]',
                           active ? 'bg-ink text-sheet' : 'bg-sunk text-ink-3 hover:bg-rule hover:text-ink',
                         )}
-                        style={{ width: `${Math.max(1.6, (words[i] / (chunker?.chunk_size ?? 512)) * 3.2)}rem` }}
+                        style={{ width: `${Math.max(1.6, (sizeOf(c) / (chunker?.chunk_size ?? 512)) * 3.2)}rem` }}
                       >
                         {c.chunk_index}
                       </button>
@@ -116,9 +119,11 @@ export function IndexingRun({ detail }: { detail: RunDetail }) {
               <span className="text-lg font-extrabold">
                 {shortDoc(current.filename)} · chunk #{current.chunk_index}
               </span>
-              <span className="figures text-xs text-ink-3">{current.text.split(/\s+/).length} words</span>
+              <span className="figures text-xs text-ink-3">{plural(sizeOf(current), unit)}</span>
             </h3>
-            <ChunkText chunk={current} overlap={current.chunk_index > 0 ? overlapWords : 0} />
+            <div className="mt-3 max-h-[60vh] overflow-y-auto pr-1">
+              <p className="text-sm leading-relaxed whitespace-pre-line text-ink-2 [overflow-wrap:anywhere]">{current.text}</p>
+            </div>
           </article>
         )}
       </div>
@@ -184,21 +189,6 @@ function CleaningTable({ documents }: { documents: CleaningSummary[] }) {
           })}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-function ChunkText({ chunk, overlap }: { chunk: Chunk; overlap: number }) {
-  const words = chunk.text.split(/(\s+)/)
-  // split() keeps the separators: word i sits at index 2i
-  const cut = overlap * 2
-  return (
-    <div className="mt-3 max-h-[60vh] overflow-y-auto pr-1">
-      {overlap > 0 && <p className="mb-1 text-xs text-ink-3">Shaded: overlap with the previous chunk.</p>}
-      <p className="text-sm leading-relaxed text-ink-2 [overflow-wrap:anywhere]">
-        {overlap > 0 && <span className="rounded-sm bg-sunk text-ink-3">{words.slice(0, cut).join('')}</span>}
-        {words.slice(overlap > 0 ? cut : 0).join('')}
-      </p>
     </div>
   )
 }

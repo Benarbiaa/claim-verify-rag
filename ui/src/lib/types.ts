@@ -18,6 +18,8 @@ export interface Chunk {
   source_type: string
   chunk_index: number
   text: string
+  /** size in the embedding model's tokens; absent in runs chunked by words */
+  tokens?: number | null
 }
 
 export interface Draft {
