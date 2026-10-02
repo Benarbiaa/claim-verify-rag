@@ -17,6 +17,12 @@ affichée comme telle (source "fixture", voir api/runs.py).
 
 Usage (pas de réseau, pas de GPU, pas de base) :
     python tests/fixtures/make_fixture_runs.py
+
+Le run produit est versionné (tests/fixtures/runs/) : c'est lui la référence,
+lue par les tests de l'interface. Ce script choisit ses passages par
+(fichier, numéro de chunk) dans le découpage d'ALORS (512 mots). Depuis le
+découpage en tokens, ces numéros désignent d'autres textes : avant de le
+relancer, il faut re-choisir les passages pour qu'ils collent aux claims.
 """
 
 import json
@@ -139,6 +145,9 @@ def chunk_texts() -> dict[tuple[str, int], tuple[str, str]]:
 
 
 def main() -> None:
+    sys.exit("Les passages de ce script viennent du découpage en mots (512 mots), remplacé par le "
+             "découpage en tokens : re-choisir les passages avant de régénérer (voir l'en-tête). "
+             "Le run versionné dans tests/fixtures/runs/ reste la référence.")
     texts = chunk_texts()
     settings = load_settings(ROOT / CONFIG_FILE)
     judge_model = settings.answering.verifier.judge.model

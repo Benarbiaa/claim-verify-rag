@@ -11,9 +11,9 @@ dist/
 .pytest_cache/
 .ruff_cache/
 
-# pipeline outputs
-reports/
-runs/
+# pipeline outputs (root only: tests/fixtures/runs/ holds committed test data)
+/reports/
+/runs/
 *.draft.txt
 claims*.json
 verdicts*.json
