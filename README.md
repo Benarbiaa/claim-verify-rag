@@ -110,7 +110,7 @@ Other commands (`make help`):
 
 | Command | What it does |
 |---|---|
-| `make check Q="..."` | Show the passages retrieved per document, no LLM calls |
+| `make check Q="..."` | Show the passages the drafter retrieves (settings from `config.yaml`), no LLM calls |
 | `make batch QUESTIONS=eval/smoke_questions.txt` | Run several questions, aggregate report (calls the LLM APIs) |
 | `make ui` | Build and serve the web UI, replay only (`make ui LIVE=1` allows live runs) |
 | `make test` · `make ui-test` | Lint + Python tests · UI type-check + tests |

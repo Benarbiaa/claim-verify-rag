@@ -5,6 +5,8 @@ Fakes everywhere: no network, no model download, no database.
 
 import json
 
+import pytest
+
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
 from claimverify.answering.retrieval import PgvectorRetriever, Retriever
@@ -118,6 +120,26 @@ def test_pgvector_retriever_searches_with_the_embedders_query_vector():
     assert passages == [PASSAGE]
     # the per-document query received the embedder's vector and the configured k
     assert conn.params[-1] == ([1.0, 0.0], "a.pdf", [1.0, 0.0], 3)
+
+
+@pytest.mark.parametrize(("extra_args", "k"), [([], 2), (["--top_k_per_doc", "4"], 4)])
+def test_query_check_shows_what_the_drafter_retrieves(monkeypatch, capsys, extra_args, k):
+    from claimverify.answering import query_check
+
+    class ClosableConnection(FakeConnection):
+        def close(self):
+            pass
+
+    conn = ClosableConnection()
+    monkeypatch.setattr(query_check.psycopg2, "connect", lambda url: conn)
+    monkeypatch.setattr(query_check, "build_embedder", lambda settings: FakeEmbedder())
+    monkeypatch.setattr("sys.argv", ["query_check", "--db_url", "fake", "--query", "Q?", "--per_document",
+                                     *extra_args])
+    query_check.main()
+
+    # k comes from config.yaml (answering.retriever: 2) unless overridden for this run
+    assert conn.params[-1][-1] == k
+    assert "source=a.pdf" in capsys.readouterr().out
 
 
 def test_llm_drafter_returns_a_draft_with_its_passages():

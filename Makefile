@@ -3,8 +3,6 @@
 
 PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
-# passages per document for `check`: keep equal to answering.retriever.top_k_per_doc (config.yaml)
-K ?= 2
 
 .DEFAULT_GOAL := help
 .PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements
@@ -25,9 +23,9 @@ db-down: ## Stop the database container (the data volume is kept)
 ingest: ## Index data/corpus into the database (local, no LLM call)
 	$(PY) -m claimverify.indexing.ingest --corpus_dir data/corpus
 
-check: ## Show the passages retrieved for Q="...", per document (no LLM call)
+check: ## Show the passages the drafter retrieves for Q="..." (no LLM call)
 	$(if $(Q),,$(error Q is required: make check Q="your question"))
-	$(PY) -m claimverify.answering.query_check --query "$(Q)" --per_document --top_k_per_doc $(K)
+	$(PY) -m claimverify.answering.query_check --query "$(Q)" --per_document
 
 run: ## Answer and verify Q="..." (calls the LLM APIs, about 50K tokens)
 	$(if $(Q),,$(error Q is required: make run Q="your question"))

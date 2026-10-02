@@ -10,15 +10,20 @@ Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.answering.query_check
     python -m claimverify.answering.query_check --query "Does semantic chunking improve retrieval?"
     python -m claimverify.answering.query_check --query "..." --per_document
+
+--per_document montre ce que reçoit le DRAFTER : le même retriever que le
+pipeline, construit par la factory depuis config.yaml (answering.retriever).
+Le juge a son propre retriever (answering.verifier.retriever) : pour ce qu'il
+lit, voir `verification --debug_claim`.
 """
 
 import argparse
 
 import psycopg2
 
-from claimverify.components.store import search_global, search_per_document
+from claimverify.components.store import search_global
 from claimverify.config import add_db_url_argument
-from claimverify.factory import build_embedder
+from claimverify.factory import build_embedder, build_retriever
 from claimverify.settings import add_config_argument, load_settings
 
 TOP_K = 5
@@ -57,20 +62,26 @@ def main():
                          help="Utilise la recherche par document (top-k par source) "
                               "au lieu du top-k global. C'est le mode utilisé pour "
                               "la génération de réponse et la vérification de claims.")
-    parser.add_argument("--top_k_per_doc", type=int, default=3)
+    parser.add_argument("--top_k_per_doc", type=int, default=None,
+                         help="Remplace pour ce run le top_k_per_doc de config.yaml "
+                              "(answering.retriever), pour comparer.")
     args = parser.parse_args()
 
-    embedder = build_embedder(load_settings(args.config))
+    settings = load_settings(args.config)
+    embedder = build_embedder(settings)
 
     conn = psycopg2.connect(args.db_url)
+    cfg = settings.answering.retriever
+    if args.top_k_per_doc is not None:
+        cfg = cfg.model_copy(update={"top_k_per_doc": args.top_k_per_doc})
+    retriever = build_retriever(cfg, embedder, conn, "answering.retriever")
 
     queries = [args.query] if args.query else DEFAULT_TEST_QUERIES
     for query in queries:
-        query_embedding = embedder.embed_query(query)
         if args.per_document:
-            results = search_per_document(conn, query_embedding, args.top_k_per_doc)
+            results = retriever.retrieve(query)
         else:
-            results = search_global(conn, query_embedding, args.top_k)
+            results = search_global(conn, embedder.embed_query(query), args.top_k)
         print_results(query, results)
 
     conn.close()
