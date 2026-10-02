@@ -60,7 +60,8 @@ them before building the eval baseline**, or the numbers you report will be skew
     dependencies of `pyproject.toml` and what they pull in, at the installed versions
     (104 packages instead of 122; anthropic, google-*, grpc, Spark… were never used).
     `tqdm` removed from the direct dependencies.
-  - [ ] A `Makefile` for the commands the README documents.
+  - [x] A `Makefile` for the commands the README documents (`make` lists them), plus `ui`,
+    `ui-test`, `lint`, `install`, `requirements`; `make ui` is replay-only unless `LIVE=1`.
   - [ ] (Optional) CI: ruff, pytest, and the UI's tsc + vitest on every push.
 
 ## P1: Step F, evaluation (the part recruiters will look at)

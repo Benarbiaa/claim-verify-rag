@@ -614,7 +614,7 @@ gave identical results.
 | **Config stored in every report and run** | `report.json`, `run_started` | any result can be reproduced |
 | **`experiments/smoke_k1.yaml`** | `experiments/` | the verifier takes 1 chunk per document to fit Qwen's 7,000 input tokens per minute |
 | **Tests never read your `.env`** | `test_settings_factory.py` | results don't depend on the developer's machine |
-| **No `Makefile` yet** | README | the README's `make` commands don't exist yet: use the `python -m` commands |
+| **`make ui` is replay-only by default** | `Makefile` | a demo can't spend API quota by accident; `LIVE=1` allows live runs |
 
 ---
 

@@ -89,8 +89,8 @@ Full titles: [`data/info/SOURCES.md`](data/info/SOURCES.md).
 ## Quickstart
 
 ```bash
-# 1. install (editable)
-pip install -e ".[dev]"            # or: pip install -r requirements.txt && pip install -e .
+# 1. install: creates .venv and installs the package (editable) with its dev and UI extras
+make install                       # Linux, exact versions: pip install -r requirements.txt && pip install -e .
 
 # 2. database: Postgres + pgvector
 make db-up                         # or use your own Postgres with: CREATE EXTENSION vector;
@@ -110,9 +110,14 @@ Other commands (`make help`):
 
 | Command | What it does |
 |---|---|
-| `make check Q="..."` | Show the retrieved chunks, no LLM calls |
-| `make batch QUESTIONS=eval/smoke_questions.txt` | Run several questions, aggregate report |
-| `make test` | Unit tests |
+| `make check Q="..."` | Show the passages retrieved per document, no LLM calls |
+| `make batch QUESTIONS=eval/smoke_questions.txt` | Run several questions, aggregate report (calls the LLM APIs) |
+| `make ui` | Build and serve the web UI, replay only (`make ui LIVE=1` allows live runs) |
+| `make test` · `make ui-test` | Lint + Python tests · UI type-check + tests |
+| `make db-down` | Stop the database container (data kept) |
+| `make requirements` | Regenerate `requirements.txt` from `pyproject.toml` |
+
+Python comes from `.venv`; use another one with `PY=...` (e.g. `make test PY=python3`).
 
 Each stage also runs on its own:
 
@@ -139,10 +144,12 @@ contradict, or say nothing about each claim. Recorded runs replay step by step (
 speed) **without any API call**.
 
 ```bash
-pip install -e ".[ui]"                     # FastAPI + uvicorn (already in [dev])
-cd ui && npm install && npm run build && cd ..
-python -m claimverify.api.server           # http://127.0.0.1:8000, opens on the latest run
+make ui                                    # http://127.0.0.1:8000, opens on the latest run (replay only)
+make ui LIVE=1                             # same, and "Ask a question" can start real runs
 ```
+
+By hand: `cd ui && npm install && npm run build`, then `python -m claimverify.api.server`
+(live runs allowed unless `--no-live`).
 
 | Option | Effect |
 |---|---|
