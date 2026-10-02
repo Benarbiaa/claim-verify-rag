@@ -1,0 +1,72 @@
+# Continuous integration: on every push and pull request, a fresh GitHub machine installs the
+# project from scratch and runs the same checks as `make test` and `make ui-test` locally.
+# The tests need no network, API key, GPU or database: no secret is configured, and none
+# should ever be (a CI run must never spend LLM quota).
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch cancels the run still in progress for the older one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only reads the code.
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} · ruff + pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false            # if one version fails, still see the result of the other
+      matrix:
+        # the oldest supported version (pyproject.toml: requires-python) and the one used daily
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip              # keep downloaded packages between runs
+          cache-dependency-path: pyproject.toml
+
+      # sentence-transformers needs torch. The default Linux build ships CUDA (~2 GB); the tests
+      # never load the model, so the CPU build (~200 MB) is enough and much faster to install.
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      # Only what pyproject.toml declares: a dependency missing there fails here.
+      - name: Install the project
+        run: pip install -e ".[dev]"
+
+      - name: Lint and tests
+        run: make test PY=python
+
+  ui:
+    name: UI · tsc + vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # npm ci installs the exact versions of package-lock.json, and fails if it is out of date.
+      - run: npm ci
+
+      - name: Type-check and tests
+        run: npx tsc -b && npx vitest run

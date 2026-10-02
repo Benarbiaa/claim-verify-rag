@@ -1,6 +1,8 @@
 # claim-verify-rag
 ### RAG Agentique avec Vérification de Véracité
 
+[![CI](https://github.com/Benarbiaa/claim-verify-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Benarbiaa/claim-verify-rag/actions/workflows/ci.yml)
+
 An agentic RAG system that **does not trust its own answer**. It drafts an answer from a corpus,
 splits it into atomic factual claims, re-checks **each claim independently against every
 source**, and returns a verdict per claim with a justification and the passages it was checked

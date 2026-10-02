@@ -62,7 +62,8 @@ them before building the eval baseline**, or the numbers you report will be skew
     `tqdm` removed from the direct dependencies.
   - [x] A `Makefile` for the commands the README documents (`make` lists them), plus `ui`,
     `ui-test`, `lint`, `install`, `requirements`; `make ui` is replay-only unless `LIVE=1`.
-  - [ ] (Optional) CI: ruff, pytest, and the UI's tsc + vitest on every push.
+  - [x] CI (`.github/workflows/ci.yml`): on every push, ruff + pytest on Python 3.11 and 3.14
+    (CPU-only torch), and the UI's tsc + vitest. No secret: the tests need no API key.
 
 ## P1: Step F, evaluation (the part recruiters will look at)
 
@@ -93,7 +94,7 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [x] Token usage per stage: each stage event records calls, tokens, retries and waiting time,
   and the report totals them per role. (Replacing the remaining `print`s with `logging` is
   still open.)
-- [ ] GitHub Actions: `ruff` + `pytest` (the tests need no DB, GPU or API key).
+- [x] GitHub Actions: `ruff` + `pytest`, and the UI's checks (see P0-5).
 - [x] PDF cleanup at ingest: a minimal `Cleaner` stage (page numbers, NFKC, words split at
   line ends), with a no-content-lost guarantee checked on every document. Reference sections
   are kept on purpose: removing them is a judgment about content, and the corpus may grow.

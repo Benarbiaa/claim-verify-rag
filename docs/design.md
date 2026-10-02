@@ -554,7 +554,10 @@ src/claimverify/
 
 ## 11. Tests
 
-112 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
+116 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
+That is what lets CI (`.github/workflows/ci.yml`) run them on every push with no secret:
+ruff + pytest on Python 3.11 and 3.14, and the UI's `tsc` + `vitest`, which read the committed
+fixture run in `tests/fixtures/runs/`.
 
 | File | What it proves |
 |---|---|
