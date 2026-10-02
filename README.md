@@ -66,8 +66,9 @@ Full titles: [`data/info/SOURCES.md`](data/info/SOURCES.md).
 │   ├── api/                    #   the web UI's server: run folders, live runs (SSE)
 │   ├── indexing/               #   pipeline 1: files → database
 │   │   ├── loading.py          #     PDF / Markdown → Document
+│   │   ├── cleaning.py         #     repairs PDF extraction (no content removed)
 │   │   ├── chunking.py         #     Document → Chunk
-│   │   └── ingest.py           #     A: load → chunk → embed → store
+│   │   └── ingest.py           #     A: load → clean → chunk → embed → store
 │   └── answering/              #   pipeline 2: question → verdicts
 │       ├── retrieval.py        #     passages formatted for prompts
 │       ├── drafting.py         #     B: grounded draft answer

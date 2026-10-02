@@ -43,7 +43,7 @@ scientific disagreement (Vectara NAACL 2025 vs LumberChunker EMNLP 2024 on chunk
   limits cause long rate-limit waits (in the sample run, 294 of 305 s of verification were waits),
   and daily limits or oversized requests stop a run.
 - Pipeline stages: Retrieve (top-k per document) → Draft → Decompose → Verify (per claim) → Done.
-  Indexing: documents → chunks → embeddings → stored.
+  Indexing: documents → cleaned → chunks → embeddings → stored.
 
 ## Capabilities and Constraints
 

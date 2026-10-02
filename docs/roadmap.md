@@ -84,8 +84,12 @@ them before building the eval baseline**, or the numbers you report will be skew
   and the report totals them per role. (Replacing the remaining `print`s with `logging` is
   still open.)
 - [ ] GitHub Actions: `ruff` + `pytest` (the tests need no DB, GPU or API key).
-- [ ] PDF cleanup at ingest: strip the reference sections and fix hyphenated line breaks.
-  Reference lists create noisy chunks that match many claims.
+- [x] PDF cleanup at ingest: a minimal `Cleaner` stage (page numbers, NFKC, words split at
+  line ends), with a no-content-lost guarantee checked on every document. Reference sections
+  are kept on purpose: removing them is a judgment about content, and the corpus may grow.
+- [ ] Measure whether reference-list chunks are retrieved as evidence; only then look for a
+  general fix. Also: 105 split words keep a hyphen because their paper never uses the joined
+  word (`gen-erating`); evidence from the whole corpus would repair most of them.
 
 - [ ] **Store runs in PostgreSQL** once the UI or the experiments need to query many runs
   ("all contested verdicts from judge X", "verification time per model"): `runs` and `events`

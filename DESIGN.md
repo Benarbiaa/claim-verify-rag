@@ -130,7 +130,7 @@ The strategy is restrained: neutrals, a fixed palette of verdict colours taken f
 - **Unverifiable grey** (`#8A9099`): an empty ring with a question mark.
 
 ### Steps
-One colour per pipeline step, in hues kept away from the verdicts' blue, vermillion and amber. The indexing steps reuse them in order (Load, Cut, Embed, Store).
+One colour per pipeline step, in hues kept away from the verdicts' blue, vermillion and amber. The indexing steps reuse them in order (Load, Cut, Embed, Store); Clean shares Load's teal, as both prepare the text.
 - **1 · Search** teal `oklch(0.5 0.09 195)`
 - **2 · Answer** green `oklch(0.5 0.12 145)`
 - **3 · Split** violet `oklch(0.49 0.16 295)`

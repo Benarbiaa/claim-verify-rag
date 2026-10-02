@@ -29,7 +29,7 @@ flowchart TB
     EM(("bge-base-en-v1.5<br/>shared embedder"))
     subgraph IDX["Indexing (once, local)"]
         direction LR
-        F[/"data/corpus/<br/>PDF + Markdown"/] --> L[Loader] --> C[Chunker] --> E1[Embedder]
+        F[/"data/corpus/<br/>PDF + Markdown"/] --> L[Loader] --> CL[Cleaner] --> C[Chunker] --> E1[Embedder]
     end
     DB[("pgvector<br/>chunks table")]
     subgraph ANS["Answering (per question)"]
@@ -50,6 +50,7 @@ flowchart TB
 | Stage | Implementation today | Model | Runs on |
 |---|---|---|---|
 | Loader | PDF + Markdown files | none | local |
+| Cleaner | minimal repair of PDF extraction: page numbers, NFKC, words split at line ends | none | local |
 | Chunker | fixed windows of 512 words, 15% overlap | none | local |
 | Embedder | `BAAI/bge-base-en-v1.5`, 768 dimensions | embedding model | your GPU (CPU works) |
 | Retriever | pgvector, top-k **per document** | the shared embedder | GPU + Postgres |
@@ -190,6 +191,10 @@ classDiagram
         <<Protocol>>
         +load(corpus_dir) list~Document~
     }
+    class Cleaner {
+        <<Protocol>>
+        +clean(documents) list~CleanedDocument~
+    }
     class Chunker {
         <<Protocol>>
         +chunk(documents) list~Chunk~
@@ -221,6 +226,8 @@ classDiagram
     }
 
     Loader <|.. FileLoader
+    Cleaner <|.. MinimalCleaner
+    Cleaner <|.. NoCleaner
     Chunker <|.. FixedSizeChunker
     Embedder <|.. BgeEmbedder
     Retriever <|.. PgvectorRetriever
@@ -277,6 +284,7 @@ flowchart LR
 providers:   groq, gemini        base_url · api_key_env · max_retries · max_wait_seconds · timeout_seconds
 embedding:   type: bge           model · device                        ← shared by both pipelines
 indexing:    loader              type: files
+             cleaner             type: minimal | none
              chunker             type: fixed_size · chunk_size · overlap_ratio
 answering:   retriever           type: pgvector · top_k_per_doc        ← used by the drafter
              drafter             type: llm · provider · model
@@ -291,6 +299,7 @@ answering:   retriever           type: pgvector · top_k_per_doc        ← used
 | Stage | `type` → class |
 |---|---|
 | loader | `files` → `FileLoader` |
+| cleaner | `minimal` → `MinimalCleaner`, `none` → `NoCleaner` |
 | chunker | `fixed_size` → `FixedSizeChunker` |
 | embedding | `bge` → `BgeEmbedder` |
 | retriever | `pgvector` → `PgvectorRetriever` |
@@ -320,6 +329,7 @@ The orchestrators only chain interfaces. They don't know which model, database o
 sequenceDiagram
     participant O as ingest
     participant L as Loader
+    participant CL as Cleaner
     participant C as Chunker
     participant E as Embedder
     participant DB as pgvector
@@ -327,6 +337,9 @@ sequenceDiagram
     O->>L: load(corpus_dir)
     L-->>O: Documents
     O->>O: emit documents_loaded
+    O->>CL: clean(documents)
+    CL-->>O: repaired Documents + changes per rule
+    O->>O: emit documents_cleaned (counts, not the text)
     O->>C: chunk(documents)
     C-->>O: Chunks
     O->>O: emit chunks_built (all chunk texts)
@@ -336,6 +349,25 @@ sequenceDiagram
     O->>DB: setup_db + replace_chunks (the table becomes exactly this corpus)
     O->>O: emit chunks_stored, run_finished
 ```
+
+**Cleaning** (`indexing/cleaning.py`): repairs what PDF extraction broke, and nothing else.
+The corpus may grow to documents no specific rule foresees, so no section (references,
+appendices) is ever removed. PDF only: a Markdown file is written by hand and left as is.
+
+| Order | Repair | Safeguard |
+|---|---|---|
+| 1 | remove page numbers | only the last line of page n, and only if it is exactly `n`: a table value is never touched |
+| 2 | Unicode NFKC | `ﬁ` → `fi`, no-break space → space |
+| 3 | collapse spaces | tabs and repeated spaces → one space; line breaks stay (table rows) |
+| 4 | words split at line ends | `rele-\nvance` → `relevance` only if the document uses `relevance` elsewhere; otherwise only the line break goes (`cross-encoder`) |
+
+The loader separates pages with `\f` (not a blank line, which would look like a paragraph end
+mid-sentence); the cleaner uses it to find page numbers, then removes it.
+
+> **Guarantee, checked on every document:** ignoring spaces, line breaks and hyphens, the cleaned
+> text equals the raw text after NFKC, page numbers aside. Otherwise the run stops with an error.
+> On the current corpus: 30 page numbers, 116 characters normalized, 241 words rejoined, 122
+> hyphens kept; about 2–4% fewer tokens per paper.
 
 **Answering** (`answering/pipeline.py`), for each question
 
@@ -386,7 +418,7 @@ flowchart LR
 ```
 runs/
 ├── 20260926_142114_indexing/
-│   └── events.jsonl          run_started · documents_loaded · chunks_built · chunks_embedded · chunks_stored · run_finished
+│   └── events.jsonl          run_started · documents_loaded · documents_cleaned · chunks_built · chunks_embedded · chunks_stored · run_finished
 └── 20260926_150302_answering/
     ├── events.jsonl          run_started · question_started · passages_retrieved · draft_written ·
     │                         claims_extracted · claim_verified × N · question_finished · run_finished
@@ -503,7 +535,7 @@ src/claimverify/
 │   ├── embedding.py    Embedder, BgeEmbedder
 │   └── store.py        pgvector: setup, writing, search
 ├── indexing/           pipeline 1: files → database
-│   ├── loading.py · chunking.py · ingest.py
+│   ├── loading.py · cleaning.py · chunking.py · ingest.py
 └── answering/          pipeline 2: question → verdicts
     ├── retrieval.py · drafting.py · decomposition.py · verification.py
     ├── pipeline.py     orchestrator + report
@@ -521,12 +553,13 @@ src/claimverify/
 
 ## 11. Tests
 
-72 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
+106 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
 
 | File | What it proves |
 |---|---|
 | `test_contracts.py` | labels defined once, source-consistency rules, JSON round trip |
-| `test_chunking.py` | chunk sizes and overlap, chunk ids, no storage without embeddings |
+| `test_cleaning.py` | each repair on small strings, page numbers vs table values, real compounds keep their hyphen, Markdown untouched, the no-content-lost guarantee |
+| `test_chunking.py` | chunk sizes and overlap, chunk ids, an ingest replaces the whole table in one transaction, no storage without embeddings or chunks |
 | `test_interfaces.py` | every implementation satisfies its Protocol and does its job; verdicts arrive one at a time; > 12 claims work |
 | `test_llm_parsing.py` | decomposition validation; each of the 9 unusable-judge cases becomes `error`; provider JSON rejection doesn't crash |
 | `test_llm_retries.py` | 429 waits as asked, 5xx backs off, 413 and daily limits stop, usage accounting |
@@ -557,6 +590,7 @@ gave identical results.
 | 12 | **Own retry loop**, limits per provider | visible retries; no useless retries on 413 or daily limits | the SDK's invisible retries |
 | 13 | **Shared usage meter** | cost per stage without the orchestrator knowing about LLMs | token counting inside each stage |
 | 14 | **Folders by pipeline**, src layout | find code by purpose; safe imports | flat package, or layers |
+| 15 | **Minimal cleaning** as its own stage, checked by a guarantee | repairs extraction without judging content; works on any future document; measurable (`none` for comparison) | removing references/appendices; classic NLP preprocessing (lowercase, stopwords) |
 
 ---
 
@@ -589,9 +623,10 @@ gave identical results.
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
 | Q4 | claims about the corpus instead of facts ("both papers say…") | decomposer | decomposer prompt |
 | Q5 | chunks of ~800 tokens: the embedder only reads 512 | chunker | token-based chunking (400 tokens) |
-| - | reference lists and hyphenated words in PDFs | loader | PDF cleanup |
+| - | reference lists are indexed like the rest of the text | cleaner | kept on purpose (minimal cleaning); measure whether reference chunks are retrieved |
 
-(Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old filename.)
+(Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old
+filename; split words, ligatures and page numbers from PDF extraction, by the cleaner.)
 
 **Next:** the quality fixes above, one stage at a time; then evaluation (gold set, metrics,
 ablations) and the UI. Details and priorities: [`roadmap.md`](roadmap.md).
