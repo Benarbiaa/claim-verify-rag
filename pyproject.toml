@@ -19,7 +19,6 @@ dependencies = [
     "python-dotenv",
     "pyyaml",
     "sentence-transformers",
-    "tqdm",
 ]
 
 [project.optional-dependencies]
