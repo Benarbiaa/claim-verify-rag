@@ -25,7 +25,8 @@ dependencies = [
 [project.optional-dependencies]
 # the web UI's server (src/claimverify/api); the UI itself is built from ui/ with npm
 ui = ["fastapi", "uvicorn[standard]"]
-dev = ["pytest", "ruff", "fastapi", "uvicorn[standard]"]
+# ruff is pinned: its default rule set changes between versions (see [tool.ruff])
+dev = ["pytest", "ruff==0.16.9", "fastapi", "uvicorn[standard]"]
 
 [project.scripts]
 claimverify-ingest = "claimverify.indexing.ingest:main"
@@ -44,5 +45,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
+# No `select`: the project follows the default rules of the pinned ruff version (788 in
+# 0.16.9), a curated subset of each family. Upgrading ruff is a deliberate change.
 line-length = 110
 src = ["src", "tests"]
