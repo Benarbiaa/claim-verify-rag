@@ -5,16 +5,33 @@ Two levels, evaluated separately so a failure can be attributed to the right sta
 ## 1. Claim-level gold set: `claims_gold.jsonl` (to build)
 
 Tests the **verifier alone**. Claims are fed directly into the verification graph, which bypasses
-drafting and decomposition. One JSON object per line:
+drafting and decomposition. The correct verdict of each claim is known in advance and **proven by
+an exact quote** from the source; every label is reviewed by a human (an LLM-written label graded
+against an LLM judge would measure nothing). One JSON object per line:
 
 ```json
-{"id": "g01", "claim": "LumberChunker outperforms semantic chunking on GutenQA.", "expected": "supported", "evidence": ["lumberchunker-emnlp2024.pdf"], "category": "single_source"}
-{"id": "g02", "claim": "Semantic chunking consistently outperforms fixed-size chunking.", "expected": "contested", "evidence": ["vectara-semantic-chunking-naacl2025.pdf", "lumberchunker-emnlp2024.pdf"], "category": "cross_source_conflict"}
-{"id": "g03", "claim": "RAG was introduced by Google in 2018.", "expected": "contradicted", "evidence": ["lewis-rag-neurips2020.pdf"], "category": "perturbed_fact"}
-{"id": "g04", "claim": "GPT-4 was trained on 13 trillion tokens.", "expected": "unverifiable", "evidence": [], "category": "out_of_corpus"}
+{"id": "g03", "category": "perturbed_fact", "claim": "LumberChunker uses GPT-4 to find chunk boundaries.",
+ "expected": "contradicted",
+ "evidence": [{"filename": "lumberchunker-emnlp2024.pdf", "stance": "contradicts", "quote": "<the exact sentence>"}],
+ "note": "why this label, in one line"}
 ```
 
-Target: about 30 claims, balanced across these categories:
+(shown on several lines here; one line per claim in the file)
+
+| Field | Meaning |
+|---|---|
+| `expected` | `supported`, `contradicted`, `contested` or `unverifiable`, never `error` |
+| `evidence` | the quotes that prove the label: `filename`, `stance` (`supports` / `contradicts`), `quote` (copied word for word) |
+| `note` | why this label |
+
+Rules, checked by `make check-gold` (`python -m claimverify.evaluation check-gold`), no LLM call:
+`supported` needs a quote for and none against; `contradicted` a quote against and none for;
+`contested` quotes on both sides from at least two documents; `unverifiable` no quote. Every quote
+must appear in the **stored** (cleaned) text of its document, ignoring spaces, line breaks and
+hyphens, so an invented or altered quote is refused. Every category must be present.
+
+Target: **10 claims, 2 per category.** That is a smoke test of the verifier, not a statistical
+measure: results are reported as counts ("1/2"), never as percentages.
 
 | Category | How to build it | Expected verdict |
 |---|---|---|

@@ -5,7 +5,7 @@ PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
 
 .DEFAULT_GOAL := help
-.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements
+.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold
 
 help: ## List the commands
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  make %-14s %s\n", $$1, $$2}'
@@ -46,6 +46,9 @@ lint: ## Check the Python code with ruff
 
 ui-test: ## Type-check and test the web UI
 	cd ui && npx tsc -b && npx vitest run
+
+check-gold: ## Check the gold set: labels, sources, and that every quote is in the corpus (no LLM call)
+	$(PY) -m claimverify.evaluation check-gold
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt

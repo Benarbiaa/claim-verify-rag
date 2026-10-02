@@ -67,7 +67,11 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## P1: Step F, evaluation (the part recruiters will look at)
 
-- [ ] Build `eval/claims_gold.jsonl` (about 30 claims across 5 categories, see `eval/README.md`).
+- [x] Gold set format and checker: `GoldClaim` (`src/claimverify/evaluation.py`), every label
+  proven by an exact quote; `make check-gold` refuses inconsistent labels and quotes not found in
+  the stored text.
+- [ ] Build `eval/claims_gold.jsonl`: 10 claims, 2 per category (see `eval/README.md`), each
+  label reviewed by hand.
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
