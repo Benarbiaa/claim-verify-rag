@@ -46,8 +46,15 @@ class BgeEmbedder:
     def token_spans(self, text: str) -> list[tuple[int, int]]:
         """Positions de chaque token de CE modèle dans le texte : le chunker
         mesure avec le tokenizer qui lira les chunks (voir chunking.py)."""
-        return self.model.tokenizer(text, add_special_tokens=False,
-                                    return_offsets_mapping=True)["offset_mapping"]
+        # verbose=False : un document entier dépasse la limite du modèle, ce
+        # qui est normal ici (on le mesure pour le découper, on ne l'embedde pas).
+        return self.model.tokenizer(text, add_special_tokens=False, return_offsets_mapping=True,
+                                    verbose=False)["offset_mapping"]
+
+    def max_tokens(self) -> int:
+        # La limite du modèle (512 positions pour bge) moins ce qu'il ajoute
+        # lui-même autour du texte ([CLS] et [SEP]).
+        return self.model.max_seq_length - self.model.tokenizer.num_special_tokens_to_add()
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         embeddings = self.model.encode(texts, batch_size=32, show_progress_bar=True,

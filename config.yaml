@@ -31,7 +31,7 @@ indexing:
     type: minimal                #   split words); none: raw text, for comparison
   chunker:
     type: fixed_size
-    chunk_size: 512
+    chunk_size: 400              # tokens of the embedding model (bge reads at most 510)
     overlap_ratio: 0.15
 
 answering:

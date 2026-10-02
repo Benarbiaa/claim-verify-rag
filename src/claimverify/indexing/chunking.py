@@ -30,6 +30,10 @@ class Tokenizer(Protocol):
 
     def token_spans(self, text: str) -> list[Span]: ...
 
+    def max_tokens(self) -> int:
+        """Tokens de texte que le modèle lit au plus (sa limite, moins ses tokens spéciaux)."""
+        ...
+
 
 @runtime_checkable
 class Chunker(Protocol):
@@ -48,6 +52,12 @@ class FixedSizeChunker:
         self.overlap_ratio = overlap_ratio
 
     def chunk(self, documents: list[Document]) -> list[Chunk]:
+        # Vérifié avant de découper : au-delà, le modèle tronquerait chaque
+        # chunk en silence, et sa fin ne serait jamais embeddée.
+        limit = self.tokenizer.max_tokens()
+        if self.chunk_size > limit:
+            raise ValueError(f"chunk_size = {self.chunk_size} tokens, mais le modèle d'embedding "
+                             f"n'en lit que {limit} par chunk : réduire indexing.chunker.chunk_size.")
         all_chunks = []
         for doc in documents:
             windows = token_windows(self.tokenizer.token_spans(doc.text),

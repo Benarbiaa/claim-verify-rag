@@ -51,6 +51,9 @@ class WordTokenizer:
         import re
         return [m.span() for m in re.finditer(r"\S+", text)]
 
+    def max_tokens(self) -> int:
+        return 510
+
 
 class PieceTokenizer:
     """Cuts words into pieces of at most 3 characters, like WordPiece cuts rare words."""
@@ -59,3 +62,6 @@ class PieceTokenizer:
         import re
         return [(s, min(s + 3, m.end())) for m in re.finditer(r"\S+", text)
                 for s in range(m.start(), m.end(), 3)]
+
+    def max_tokens(self) -> int:
+        return 510

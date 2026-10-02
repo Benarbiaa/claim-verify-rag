@@ -62,6 +62,13 @@ def test_every_chunk_is_a_slice_of_the_original_text():
     assert len(chunks) > 1 and all(c.text in text for c in chunks)
 
 
+def test_a_chunk_size_above_the_models_limit_is_refused():
+    # 512 would become 514 with the model's own [CLS] and [SEP]: silently truncated
+    chunker = FixedSizeChunker(WordTokenizer(), chunk_size=512)
+    with pytest.raises(ValueError, match="n'en lit que 510"):
+        chunker.chunk([doc(words(10))])
+
+
 def test_empty_text_gives_no_chunks():
     assert FixedSizeChunker(WordTokenizer()).chunk([doc("")]) == []
 

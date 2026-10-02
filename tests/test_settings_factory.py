@@ -38,7 +38,7 @@ def raw_config() -> dict:
 
 def test_config_yaml_holds_todays_values():
     s = load_settings(CONFIG)
-    assert (s.indexing.chunker.chunk_size, s.indexing.chunker.overlap_ratio) == (512, 0.15)
+    assert (s.indexing.chunker.chunk_size, s.indexing.chunker.overlap_ratio) == (400, 0.15)
     assert s.answering.retriever.top_k_per_doc == s.answering.verifier.retriever.top_k_per_doc == 2
     assert s.answering.drafter.model == "openai/gpt-oss-120b"
     assert s.answering.verifier.judge.model == "qwen/qwen3.8-27b"
@@ -89,7 +89,7 @@ def test_build_indexing(settings):
     assert isinstance(stages.loader, FileLoader)
     assert isinstance(stages.cleaner, MinimalCleaner)
     assert isinstance(stages.chunker, FixedSizeChunker)
-    assert (stages.chunker.chunk_size, stages.chunker.overlap_ratio) == (512, 0.15)
+    assert (stages.chunker.chunk_size, stages.chunker.overlap_ratio) == (400, 0.15)
     assert isinstance(stages.embedder, BgeEmbedder)
     # chunks are measured by the very model that will embed them
     assert stages.chunker.tokenizer is stages.embedder
