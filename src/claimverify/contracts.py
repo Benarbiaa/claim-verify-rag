@@ -50,6 +50,13 @@ class Document(BaseModel):
     text: str
 
 
+class CleanedDocument(BaseModel):
+    """Sortie du nettoyage : le document réparé, et ce que chaque règle a changé."""
+    document: Document
+    characters_before: int
+    changes: dict[str, int] = {}  # règle -> nombre de réparations
+
+
 class Chunk(BaseModel):
     """Un morceau de document, l'unité stockée et recherchée."""
     chunk_id: str

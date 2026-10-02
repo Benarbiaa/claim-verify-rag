@@ -11,6 +11,11 @@ from pypdf import PdfReader
 
 from claimverify.contracts import Document
 
+# Entre deux pages : un saut de page, pas une ligne vide (qui ressemblerait à
+# une fin de paragraphe au milieu d'une phrase). Le nettoyage (cleaning.py)
+# s'en sert pour repérer les numéros de page, puis le retire.
+PAGE_BREAK = "\f"
+
 
 @runtime_checkable
 class Loader(Protocol):
@@ -29,7 +34,7 @@ class FileLoader:
 def parse_pdf(path: Path) -> str:
     reader = PdfReader(str(path))
     pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n\n".join(pages)
+    return PAGE_BREAK.join(pages)
 
 
 def parse_markdown(path: Path) -> str:
