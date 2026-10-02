@@ -70,8 +70,9 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [x] Gold set format and checker: `GoldClaim` (`src/claimverify/evaluation.py`), every label
   proven by an exact quote; `make check-gold` refuses inconsistent labels and quotes not found in
   the stored text.
-- [ ] Build `eval/claims_gold.jsonl`: 10 claims, 2 per category (see `eval/README.md`), each
-  label reviewed by hand.
+- [x] Build `eval/claims_gold.jsonl`: 10 claims, 2 per category (see `eval/README.md`), each
+  label reviewed by hand. g05 is the cleanest conflict (does chunking matter much?); g06 is the
+  hardest (LumberChunker never tests fixed-size chunking: see its note).
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
