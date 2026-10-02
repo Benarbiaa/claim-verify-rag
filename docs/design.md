@@ -51,7 +51,7 @@ flowchart TB
 |---|---|---|---|
 | Loader | PDF + Markdown files | none | local |
 | Cleaner | minimal repair of PDF extraction: page numbers, NFKC, words split at line ends | none | local |
-| Chunker | fixed windows of 512 words, 15% overlap | none | local |
+| Chunker | fixed windows of 400 tokens **of the embedder**, 15% overlap, cut between words | the embedder's tokenizer | local |
 | Embedder | `BAAI/bge-base-en-v1.5`, 768 dimensions | embedding model | your GPU (CPU works) |
 | Retriever | pgvector, top-k **per document** | the shared embedder | GPU + Postgres |
 | Drafter | LLM with a grounded, cited prompt | `openai/gpt-oss-120b` | Groq API |
@@ -237,6 +237,7 @@ classDiagram
     Verifier <|.. LangGraphVerifier
 
     PgvectorRetriever o-- Embedder : receives
+    FixedSizeChunker o-- BgeEmbedder : counts tokens with
     LangGraphVerifier o-- Retriever : receives
     LangGraphVerifier o-- Judge : receives
 ```
@@ -285,7 +286,7 @@ providers:   groq, gemini        base_url · api_key_env · max_retries · max_w
 embedding:   type: bge           model · device                        ← shared by both pipelines
 indexing:    loader              type: files
              cleaner             type: minimal | none
-             chunker             type: fixed_size · chunk_size · overlap_ratio
+             chunker             type: fixed_size · chunk_size (embedder tokens, ≤ 510) · overlap_ratio
 answering:   retriever           type: pgvector · top_k_per_doc        ← used by the drafter
              drafter             type: llm · provider · model
              decomposer          type: llm · provider · model
@@ -553,13 +554,13 @@ src/claimverify/
 
 ## 11. Tests
 
-106 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
+112 tests, **no API, no GPU, no database**: fakes replace the LLMs, the retriever, the clock.
 
 | File | What it proves |
 |---|---|
 | `test_contracts.py` | labels defined once, source-consistency rules, JSON round trip |
 | `test_cleaning.py` | each repair on small strings, page numbers vs table values, real compounds keep their hyphen, Markdown untouched, the no-content-lost guarantee |
-| `test_chunking.py` | chunk sizes and overlap, chunk ids, an ingest replaces the whole table in one transaction, no storage without embeddings or chunks |
+| `test_chunking.py` | token windows (fake tokenizers): size limit, exact overlap, nothing lost, never a cut inside a word, every chunk a slice of the original text, a size above the model's limit refused; chunk ids, an ingest replaces the whole table in one transaction, no storage without embeddings or chunks |
 | `test_interfaces.py` | every implementation satisfies its Protocol and does its job; verdicts arrive one at a time; > 12 claims work |
 | `test_llm_parsing.py` | decomposition validation; each of the 9 unusable-judge cases becomes `error`; provider JSON rejection doesn't crash |
 | `test_llm_retries.py` | 429 waits as asked, 5xx backs off, 413 and daily limits stop, usage accounting |
@@ -591,6 +592,7 @@ gave identical results.
 | 13 | **Shared usage meter** | cost per stage without the orchestrator knowing about LLMs | token counting inside each stage |
 | 14 | **Folders by pipeline**, src layout | find code by purpose; safe imports | flat package, or layers |
 | 15 | **Minimal cleaning** as its own stage, checked by a guarantee | repairs extraction without judging content; works on any future document; measurable (`none` for comparison) | removing references/appendices; classic NLP preprocessing (lowercase, stopwords) |
+| 16 | **Chunks measured in the embedder's tokens**, cut from the original text | the whole chunk is embedded, exactly what the judge reads; case and line breaks kept | words (41% of the text was never embedded); another tokenizer |
 
 ---
 
@@ -600,6 +602,8 @@ gave identical results.
 |---|---|---|
 | **Fail fast at startup** | `settings.py`, `factory.py` | config, keys and models are checked before any expensive work |
 | **Lazy embedder** | `BgeEmbedder.model` | creating the stages is instant; the model loads on first use |
+| **The chunker counts with the embedder itself** | `build_indexing`, `BgeEmbedder.token_spans` | the 512 limit is in the model's own tokens; words or another tokenizer give other counts, and an overflow is truncated silently |
+| **The limit is read from the model** | `BgeEmbedder.max_tokens` | `max_seq_length` minus `[CLS]`/`[SEP]` = 510; a method, not an attribute, so building the stages never loads the model |
 | **One shared embedder** | `build_answering` | questions and claims must be embedded like the chunks |
 | **Each provider gets only its own key** | `api_key_env` | the Groq key is never sent to Gemini |
 | **LangGraph step limit raised** | `LangGraphVerifier.verify` | the default (25 steps) crashed answers with more than 12 claims |
@@ -622,11 +626,11 @@ gave identical results.
 |---|---|---|---|
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
 | Q4 | claims about the corpus instead of facts ("both papers say…") | decomposer | decomposer prompt |
-| Q5 | chunks of ~800 tokens: the embedder only reads 512 | chunker | token-based chunking (400 tokens) |
 | - | reference lists are indexed like the rest of the text | cleaner | kept on purpose (minimal cleaning); measure whether reference chunks are retrieved |
 
 (Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old
-filename; split words, ligatures and page numbers from PDF extraction, by the cleaner.)
+filename; split words, ligatures and page numbers from PDF extraction, by the cleaner; Q5, chunks of
+~800 tokens of which the embedder read 512, by token-based chunking.)
 
 **Next:** the quality fixes above, one stage at a time; then evaluation (gold set, metrics,
 ablations) and the UI. Details and priorities: [`roadmap.md`](roadmap.md).

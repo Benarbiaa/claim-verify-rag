@@ -67,7 +67,7 @@ Full titles: [`data/info/SOURCES.md`](data/info/SOURCES.md).
 │   ├── indexing/               #   pipeline 1: files → database
 │   │   ├── loading.py          #     PDF / Markdown → Document
 │   │   ├── cleaning.py         #     repairs PDF extraction (no content removed)
-│   │   ├── chunking.py         #     Document → Chunk
+│   │   ├── chunking.py         #     Document → Chunk (in the embedder's tokens)
 │   │   └── ingest.py           #     A: load → clean → chunk → embed → store
 │   └── answering/              #   pipeline 2: question → verdicts
 │       ├── retrieval.py        #     passages formatted for prompts
@@ -168,7 +168,7 @@ visual design is described in [`DESIGN.md`](DESIGN.md).
 - [x] End-to-end runner with timings and saved reports
 - [x] Modular pipeline: data contracts, one interface per stage, stages built from `config.yaml`
 - [x] The verifier uses a different model family than the drafter
-- [ ] Retrieval correctness fixes (index, token-aware chunking)
+- [x] Retrieval correctness fixes (exact search, ingest replaces the table, PDF cleanup, token-aware chunking)
 - [ ] **Step F:** formal evaluation (claim-level gold set + end-to-end questions)
 - [x] **Step G:** web UI (replay, live runs, indexing view)
 - [ ] Technical report

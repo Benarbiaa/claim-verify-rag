@@ -30,12 +30,16 @@ them before building the eval baseline**, or the numbers you report will be skew
   *Consequence:* this was not the cause of the false "unverifiable" verdicts. The one in the
   recorded run (c11) is a claim about the draft itself, a decomposition issue (Q4 in design.md).
 
-- [ ] **P0-2. Chunks are measured in words, but the embedder limit is 512 tokens.** 512
-  whitespace words is likely more than 512 WordPiece tokens for academic PDF text, and
-  `bge-base-en-v1.5` silently truncates at 512. So the tail of every chunk may never be
-  embedded, while the LLM still sees it in the evidence.
-  *Check:* count `model.tokenizer(chunk)["input_ids"]` lengths over the corpus.
-  *Fix:* chunk by tokenizer tokens (for example 400 tokens with 15% overlap).
+- [x] **P0-2. Chunks are measured in words, but the embedder limit is 512 tokens.**
+  *Measured:* 512-word chunks had a median of ~800 bge tokens; 52 of 55 went over the limit and
+  **41% of the corpus text was never embedded**, while the LLM still read it as evidence.
+  *Fix:* the chunker counts with the embedder itself (`token_spans`), 400 tokens with 15%
+  overlap, cut between words from the original text; a size above the model's limit (510,
+  read from the model) is refused.
+  *Result:* 120 chunks, all ≤ 400 tokens, 0% unembedded. On the 15 test queries, 13 of 76
+  retrieved passages come mostly from text that was never embedded before. Passages given to the
+  LLMs are about half the size (drafter ~6,100 → ~3,000 tokens; judge ~2,600 → ~1,500 per claim),
+  so the judge could go back to 2 passages per document: to test in the evaluation.
 
 - [x] **P0-3. Split "contradicted" into two verdicts.** Added `contested` (the sources conflict
   with each other) next to `contradicted` (the evidence says the claim is wrong), with rules
@@ -109,8 +113,8 @@ them before building the eval baseline**, or the numbers you report will be skew
 
 ## Suggested order for the next sessions
 
-1. P0-1 → re-run the smoke questions and compare the "unverifiable" counts.
-2. P0-2 → re-ingest.
-3. P0-3 (verdict schema), because the gold set's labels depend on it.
-4. Gold set + eval runner → first baseline numbers.
-5. Ablations, then the UI, then the report.
+1. P0-5 (housekeeping).
+2. Gold set with an `evidence_quote` per claim (the exact sentence that proves it), then a
+   retrieval-only comparison of chunk sizes (no LLM: is the quote's chunk retrieved?).
+3. Eval runner with the judge → first baseline numbers.
+4. Ablations (judge `top_k_per_doc` 1 vs 2, retrieval, LLMs), then the report.
