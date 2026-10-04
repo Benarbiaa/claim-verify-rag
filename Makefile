@@ -5,7 +5,7 @@ PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
 
 .DEFAULT_GOAL := help
-.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold
+.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval
 
 help: ## List the commands
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  make %-14s %s\n", $$1, $$2}'
@@ -49,6 +49,9 @@ ui-test: ## Type-check and test the web UI
 
 check-gold: ## Check the gold set: labels, sources, and that every quote is in the corpus (no LLM call)
 	$(PY) -m claimverify.evaluation check-gold
+
+eval-retrieval: ## Does the search bring back each proof? Chunk sizes 256/400/510 compared in memory (no LLM call)
+	$(PY) -m claimverify.evaluation retrieval --chunk-sizes 256 510
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt

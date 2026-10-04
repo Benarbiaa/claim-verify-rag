@@ -47,6 +47,25 @@ never `unverifiable`, so they don't distort that class.
 Metrics: per-class precision and recall, a confusion matrix, and a separate
 **false-contradiction rate** on `complementary` claims.
 
+## 1b. Retrieval set: `retrieval_set.jsonl`
+
+Tests the **search alone**: does it bring the judge the passage that holds the proof? Each line
+is a claim and the exact quote it should retrieve, with no verdict:
+
+```json
+{"id": "r10", "claim": "LumberChunker beat the strongest baseline by 7.37% in DCG@20.",
+ "filename": "lumberchunker-emnlp2024.pdf", "quote": "<the exact sentence>"}
+```
+
+32 pairs, 8 per document, plus every quote of the gold set: 44 quotes. Without labels to review or
+LLM calls, a larger set is cheap, and 44 items narrow the uncertainty that 12 would leave.
+
+`make eval-retrieval` (no LLM call) ranks every chunk of the quote's document by similarity to the
+claim, in memory (same cosine ranking as pgvector, checked identical on all 40 claims), and records
+the rank of the chunk that holds the quote. One run gives the recall for every k, for chunk sizes
+of 256, 400 and 510 tokens, compared quote by quote. Results: [`results/retrieval.md`](results/retrieval.md).
+The recall is a **lower bound**: another chunk may state the same fact in other words.
+
 ## 2. Question-level set: `questions.jsonl` (to build)
 
 Tests **end to end**: 20 to 30 questions, each annotated with the verdict pattern you expect

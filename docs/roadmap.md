@@ -73,6 +73,14 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [x] Build `eval/claims_gold.jsonl`: 10 claims, 2 per category (see `eval/README.md`), each
   label reviewed by hand. g05 is the cleanest conflict (does chunking matter much?); g06 is the
   hardest (LumberChunker never tests fixed-size chunking: see its note).
+- [x] Retrieval measurement (`make eval-retrieval`, no LLM): 44 claim → quote pairs, rank of the
+  proof's chunk in its document. **With the current settings (400 tokens, judge k = 2), the
+  judge sees the proof for only 23/44 quotes (52 %, 95 % interval 38–66 %; a lower bound).**
+  Lewis 3/10. Neither side of the two conflict claims (g05, g06) is in the judge's passages.
+  Chunk size (256 / 510) changes little (+1 to +3, within noise); k matters more (k = 5: 31/44).
+  Reference-list chunks never take a slot. Results: `eval/results/retrieval.md`.
+- [ ] Improve retrieval, measured with the same tool at no LLM cost: many missed proofs hold
+  exact figures or names (7.37 %, 400M, FAISS, 21M) that lexical search (BM25) matches well.
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
