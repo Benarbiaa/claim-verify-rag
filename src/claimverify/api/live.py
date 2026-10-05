@@ -1,15 +1,15 @@
 """
-Mode direct — lancer le vrai pipeline depuis l'interface
-=========================================================
+Live runs — running the real pipeline from the UI
+=================================================
 
-Le pipeline tourne dans un thread, avec le code existant : factory.build_answering
-et pipeline.run_single_question. Un sink de plus (BroadcastSink) transmet chaque
-événement aux navigateurs abonnés (Server-Sent Events, voir app.py), à côté
-du terminal et de events.jsonl : le run live est enregistré comme les autres,
-et se rejoue ensuite sans appel API.
+The pipeline runs in a thread, with the existing code: factory.build_answering
+and pipeline.run_single_question. One more sink (BroadcastSink) sends each
+event to the subscribed browsers (Server-Sent Events, see app.py), next to the
+terminal and events.jsonl: a live run is recorded like any other, and replays
+later with no API call.
 
-Un seul run live à la fois : les limites du palier gratuit de Groq sont
-serrées, et deux runs en parallèle se partageraient la même limite par minute.
+One live run at a time: Groq's free-tier limits are tight, and two runs in
+parallel would share the same per-minute limit.
 """
 
 import asyncio
@@ -31,19 +31,19 @@ from claimverify.llm import LLMCallError
 from claimverify.reporting import ConsoleSink, RecorderSink, Run
 from claimverify.settings import Settings, load_settings
 
-# Repli quand aucun run enregistré ne permet de mesurer le coût d'une question.
+# Fallback when no recorded run can measure what a question costs.
 DEFAULT_TOKENS_PER_QUESTION = 50_000
-# Limite par jour mesurée sur ce projet (docs/design.md, section 8) : c'est elle
-# qui borne le nombre de questions par jour sur le palier gratuit.
+# Daily limit measured on this project (docs/design.md, section 8): it is what
+# bounds the number of questions per day on the free tier.
 DAILY_LIMIT_NOTE = "Groq free tier: the judge model (qwen/qwen3.8-27b) allows 200,000 tokens per day."
 
 
 class LiveBusy(RuntimeError):
-    """Un run live est déjà en cours."""
+    """A live run is already in progress."""
 
 
 class LiveUnavailable(RuntimeError):
-    """Le run ne peut pas démarrer (clé API, base, config) : message pour l'utilisateur."""
+    """The run cannot start (API key, database, config): a message for the user."""
 
 
 @dataclass
@@ -51,13 +51,13 @@ class LiveRun:
     run_id: str
     question: str
     status: str = "running"            # running, finished, failed
-    error: dict | None = None          # {"kind", "message"} si failed
-    backlog: list[str] = field(default_factory=list)  # messages SSE déjà émis
+    error: dict | None = None          # {"kind", "message"} when failed
+    backlog: list[str] = field(default_factory=list)  # SSE messages already sent
     subscribers: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def publish(self, kind: str, data: dict) -> None:
-        """Appelé depuis le thread du pipeline : garde le message et le transmet aux abonnés."""
+        """Called from the pipeline's thread: keeps the message and sends it to subscribers."""
         message = f"event: {kind}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
         with self.lock:
             self.backlog.append(message)
@@ -65,7 +65,7 @@ class LiveRun:
                 loop.call_soon_threadsafe(queue.put_nowait, message)
 
     def subscribe(self, loop: asyncio.AbstractEventLoop) -> tuple[list[str], asyncio.Queue]:
-        """Les messages déjà émis, et une file pour les suivants (sans trou ni doublon)."""
+        """The messages already sent, and a queue for the next ones (no gap, no duplicate)."""
         queue: asyncio.Queue = asyncio.Queue()
         with self.lock:
             self.subscribers.append((loop, queue))
@@ -81,7 +81,7 @@ class LiveRun:
 
 
 class BroadcastSink:
-    """Sink : chaque événement du run part vers les navigateurs abonnés."""
+    """Sink: each event of the run goes to the subscribed browsers."""
 
     def __init__(self, live: LiveRun):
         self.live = live
@@ -91,7 +91,7 @@ class BroadcastSink:
 
 
 def describe_failure(error: Exception) -> dict:
-    """Un message clair pour l'interface, selon ce qui a arrêté le run."""
+    """A clear message for the UI, depending on what stopped the run."""
     cause = error.__cause__
     status = getattr(cause, "status_code", None)
     if isinstance(error, LLMCallError) and status == 413:
@@ -118,10 +118,10 @@ class LiveRunner:
         self.runs_dir = runs_dir
         self.db_url = db_url if db_url is not None else os.getenv("DB_URL")
         self.runs: dict[str, LiveRun] = {}
-        self._embedders: dict[tuple, Embedder] = {}  # le modèle ne se charge qu'une fois
+        self._embedders: dict[tuple, Embedder] = {}  # the model loads only once
         self._lock = threading.Lock()
 
-    # --- ce que l'interface affiche avant de lancer -----------------------------------
+    # --- what the UI shows before starting ---------------------------------------------
 
     def config_files(self) -> list[str]:
         files = [p for p in [self.project_root / "config.yaml"] if p.exists()]
@@ -139,7 +139,7 @@ class LiveRunner:
         for name in self.config_files():
             try:
                 settings = load_settings(self.project_root / name)
-            except Exception as e:  # noqa: BLE001 (config invalide : montrée, pas lançable)
+            except Exception as e:  # noqa: BLE001 (invalid config: shown, not runnable)
                 configs.append({"file": name, "error": str(e).splitlines()[0]})
                 continue
             configs.append({"file": name, "models": _models(settings),
@@ -157,7 +157,7 @@ class LiveRunner:
             "running": running.run_id if running else None,
         }
 
-    # --- lancement --------------------------------------------------------------------
+    # --- starting a run ---------------------------------------------------------------
 
     def start(self, question: str, config_file: str) -> LiveRun:
         question = question.strip()
@@ -194,7 +194,7 @@ class LiveRunner:
         return live
 
     def _run(self, live: LiveRun, run: Run, stages, settings: Settings, config_file: str, conn) -> None:
-        # Même déroulé que pipeline.main(), pour une question.
+        # Same flow as pipeline.main(), for one question.
         start = time.perf_counter()
         try:
             run.emit(RunStarted, config=settings.model_dump(),
@@ -209,7 +209,7 @@ class LiveRunner:
                      summary={"questions": 1, "run_dir": str(run.dir)})
             live.status = "finished"
             live.publish("end", {"status": "finished"})
-        except Exception as e:  # noqa: BLE001 (tout arrêt doit atteindre le navigateur)
+        except Exception as e:  # noqa: BLE001 (any stop must reach the browser)
             live.error = describe_failure(e)
             live.status = "failed"
             live.publish("failed", live.error)
@@ -239,7 +239,7 @@ def _missing_keys(settings: Settings) -> list[str]:
 
 
 def _report_metadata(run: Run, settings: Settings, config_file: str, stages) -> dict:
-    # Les mêmes champs que pipeline.main() écrit dans report.json.
+    # The same fields pipeline.main() writes to report.json.
     a = settings.answering
     return {
         "timestamp": run.run_id,

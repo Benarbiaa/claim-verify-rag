@@ -1,17 +1,17 @@
 """
-API de l'interface — les runs enregistrés, et le mode direct
-=============================================================
+The UI's API — recorded runs, and live runs
+===========================================
 
-    GET  /api/runs                  la liste des runs (résumés)
-    GET  /api/runs/{run_id}         un run : résumé, tous ses événements, métadonnées du rapport
-    GET  /api/live                  ce qu'il faut savoir avant de lancer (configs, coût estimé)
-    POST /api/live                  lance le vrai pipeline sur une question (appels LLM !)
-    GET  /api/live/{run_id}/stream  les événements d'un run live, en Server-Sent Events
+    GET  /api/runs                  the list of runs (summaries)
+    GET  /api/runs/{run_id}         one run: summary, all its events, report metadata
+    GET  /api/live                  what to know before starting (configs, estimated cost)
+    POST /api/live                  runs the real pipeline on a question (LLM calls!)
+    GET  /api/live/{run_id}/stream  the events of a live run, as Server-Sent Events
 
-Le rejeu d'un run enregistré se fait entièrement dans le navigateur, à partir
-des événements : aucun appel API. Seul POST /api/live appelle les LLM.
+Replaying a recorded run happens entirely in the browser, from its events: no
+API call. Only POST /api/live calls the LLMs.
 
-Si ui/dist existe (npm run build), l'interface est servie par la même adresse.
+If ui/dist exists (npm run build), the UI is served from the same address.
 """
 
 import asyncio
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from claimverify.api.live import LiveBusy, LiveRunner, LiveUnavailable
 from claimverify.api.runs import RunStore
 
-KEEPALIVE_SECONDS = 15  # un commentaire SSE régulier : une attente de 60 s ne coupe pas la connexion
+KEEPALIVE_SECONDS = 15  # a regular SSE comment: a 60 s wait does not drop the connection
 
 
 class LiveRequest(BaseModel):
@@ -113,6 +113,6 @@ def create_app(store: RunStore, live: LiveRunner | None = None, ui_dist: Path | 
             file = (ui_dist / path).resolve()
             if path and file.is_file() and ui_dist.resolve() in file.parents:
                 return FileResponse(file)
-            return FileResponse(ui_dist / "index.html")  # routes de l'interface (/runs/...)
+            return FileResponse(ui_dist / "index.html")  # the UI's own routes (/runs/...)
 
     return app

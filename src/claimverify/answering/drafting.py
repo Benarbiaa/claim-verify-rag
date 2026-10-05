@@ -1,18 +1,18 @@
 """
-Génération de réponse brouillon — Étape B
-============================================
+Drafting an answer — Step B
+===========================
 
-Boucle : question -> retrieval PAR DOCUMENT (chaque source du corpus a une
-chance d'être représentée, voir components/store.py) -> génération d'une
-réponse par le drafter (answering.drafter dans config.yaml), en citant les
-sources utilisées. La clé API du fournisseur choisi se met dans .env.
+Flow: question -> retrieval PER DOCUMENT (every source of the corpus gets a
+chance to be represented, see components/store.py) -> an answer written by
+the drafter (answering.drafter in config.yaml), citing the sources it uses.
+The chosen provider's API key goes in .env.
 
-Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+Usage (--db_url is optional when DB_URL is in .env, see config.py):
     python -m claimverify.answering.drafting \
         --query "Does semantic chunking improve retrieval performance?" --save_to draft.json
 
-Le fichier sauvegardé est un Draft (voir contracts.py) : question, réponse et
-passages utilisés, relisible par decomposition --draft_file.
+The saved file is a Draft (see contracts.py): question, answer and passages
+used, readable by decomposition --draft_file.
 """
 
 import argparse
@@ -29,13 +29,13 @@ from claimverify.settings import add_config_argument, load_settings
 
 @runtime_checkable
 class Drafter(Protocol):
-    """Interface : rédige une réponse à la question à partir des passages."""
+    """Interface: writes an answer to the question from the passages."""
 
     def draft(self, question: str, passages: list[Passage]) -> Draft: ...
 
 
 class LLMDrafter:
-    """Implémentation : un LLM (rôle "draft" de llm.py) avec SYSTEM_PROMPT ci-dessous."""
+    """Implementation: an LLM (role "draft" of llm.py) with SYSTEM_PROMPT below."""
 
     def __init__(self, llm: LLM):
         self.llm = llm
@@ -77,7 +77,7 @@ Question: {query}
 
 
 def main():
-    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    # Local import: factory imports this module, importing it at the top would be circular.
     from claimverify.factory import build_drafter, build_embedder, build_retriever
 
     parser = argparse.ArgumentParser()
@@ -85,8 +85,8 @@ def main():
     add_config_argument(parser)
     parser.add_argument("--query", type=str, required=True)
     parser.add_argument("--save_to", type=str, default=None,
-                         help="Chemin optionnel pour sauvegarder le brouillon en JSON "
-                              "(entrée de decomposition --draft_file).")
+                         help="Optional path to save the draft as JSON "
+                              "(input of decomposition --draft_file).")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -99,15 +99,15 @@ def main():
     conn.close()
 
     docs_covered = sorted({p.filename for p in passages})
-    print(f"\n{len(passages)} chunks récupérés depuis {len(docs_covered)} document(s) :")
+    print(f"\n{len(passages)} chunks retrieved from {len(docs_covered)} document(s):")
     for doc in docs_covered:
         print(f"  - {doc}")
 
-    print(f"\nGénération de la réponse brouillon ({settings.answering.drafter.model})...\n")
+    print(f"\nWriting the draft answer ({settings.answering.drafter.model})...\n")
     draft = drafter.draft(args.query, passages)
 
     print("=" * 100)
-    print(f"QUESTION : {args.query}")
+    print(f"QUESTION: {args.query}")
     print("=" * 100)
     print(draft.text)
     print("=" * 100)
@@ -115,7 +115,7 @@ def main():
     if args.save_to:
         with open(args.save_to, "w", encoding="utf-8") as f:
             f.write(draft.model_dump_json(indent=2))
-        print(f"\nBrouillon sauvegardé dans {args.save_to}")
+        print(f"\nDraft saved to {args.save_to}")
 
 
 if __name__ == "__main__":

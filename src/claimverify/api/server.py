@@ -1,13 +1,13 @@
 """
-Lancer l'interface
-==================
+Starting the UI
+===============
 
-    python -m claimverify.api.server                  runs/ + interface sur http://127.0.0.1:8000
-    python -m claimverify.api.server --fixtures       ajoute les runs de test (verdict "contested")
-    python -m claimverify.api.server --no-live        rejeu seulement : aucun appel LLM possible
+    python -m claimverify.api.server                  runs/ + the UI on http://127.0.0.1:8000
+    python -m claimverify.api.server --fixtures       adds the test runs (verdict "contested")
+    python -m claimverify.api.server --no-live        replay only: no LLM call possible
 
-Pendant le développement de l'interface : `npm run dev` dans ui/ (Vite
-redirige /api vers ce serveur).
+While developing the UI: `npm run dev` in ui/ (Vite forwards /api to this
+server).
 """
 
 import argparse
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import uvicorn
 
-import claimverify.config  # noqa: F401  (charge .env : clés API et DB_URL pour le mode direct)
+import claimverify.config  # noqa: F401  (loads .env: API keys and DB_URL for live runs)
 from claimverify.api.app import create_app
 from claimverify.api.live import LiveRunner
 from claimverify.api.runs import RunStore
@@ -30,9 +30,9 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--runs_dir", type=Path, default=RUNS_DIR)
     parser.add_argument("--fixtures", action="store_true",
-                        help=f"Affiche aussi les runs de test de {FIXTURES_DIR}.")
+                        help=f"Also lists the test runs of {FIXTURES_DIR}.")
     parser.add_argument("--no-live", action="store_true",
-                        help="Désactive le mode direct (aucun appel LLM depuis l'interface).")
+                        help="Disables live runs (no LLM call from the UI).")
     args = parser.parse_args()
 
     roots = {"recorded": args.runs_dir}

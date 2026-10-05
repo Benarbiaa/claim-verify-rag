@@ -1,49 +1,49 @@
 """
-Contrats de données du pipeline
-================================
+The pipeline's data contracts
+=============================
 
-Les objets qui circulent entre les étapes, définis ici une seule fois.
-Chaque étape ne connaît des autres que ces contrats : on peut remplacer
-l'implémentation d'une étape (autre LLM, modèle local, classifieur...) sans
-toucher au reste, tant qu'elle consomme et produit ces objets.
+The objects passed between stages, defined here once. Each stage knows the
+others only through these contracts: a stage's implementation (another LLM, a
+local model, a classifier...) can be replaced without touching the rest, as
+long as it consumes and produces these objects.
 
-    INDEXATION   Document -> Chunk
-    RÉPONSE      question -> Passage -> Draft -> Claim -> Verdict
+    INDEXING    Document -> Chunk
+    ANSWERING   question -> Passage -> Draft -> Claim -> Verdict
 
-Tous les contrats sont des modèles Pydantic : ils valident les données (utile
-pour les sorties de LLM) et se sérialisent en JSON, ce qui permet de lancer
-chaque étape seule, à partir du fichier produit par l'étape précédente.
+Every contract is a Pydantic model: it validates the data (useful for LLM
+outputs) and serializes to JSON, so each stage can run on its own, from the
+file the previous stage produced.
 """
 
 from typing import Literal, get_args
 
 from pydantic import BaseModel, model_validator
 
-# Les verdicts possibles, définis une seule fois. Toute étape qui en a besoin
-# (rapport, résumé, évaluation) les importe d'ici au lieu de les recopier.
+# The possible verdicts, defined once. Any stage that needs them (report,
+# summary, evaluation) imports them from here instead of copying them.
 #
-# Les 4 verdicts qu'un juge peut rendre :
-#   supported     au moins une source appuie le claim, aucune ne le contredit
-#   contradicted  les sources contredisent le claim, aucune ne l'appuie
-#   contested     les sources se contredisent ENTRE ELLES sur ce claim
-#   unverifiable  aucune source ne traite du sujet du claim
+# The 4 verdicts a judge can give:
+#   supported     at least one source backs the claim, none contradicts it
+#   contradicted  the sources contradict the claim, none backs it
+#   contested     the sources contradict EACH OTHER on this claim
+#   unverifiable  no source deals with the claim's subject
 JudgeLabel = Literal["supported", "contradicted", "contested", "unverifiable"]
 JUDGE_LABELS: tuple[str, ...] = get_args(JudgeLabel)
-# "error" n'est jamais proposé au juge : c'est notre code qui le pose quand la
-# réponse du juge est inexploitable. Ce n'est pas un jugement sur les sources,
-# il est donc compté à part (et un nouvel essai peut le corriger).
+# "error" is never offered to the judge: our code sets it when the judge's
+# answer is unusable. It is not a judgment about the sources, so it is counted
+# separately (and a new attempt can fix it).
 VerdictLabel = Literal[JudgeLabel, "error"]
 VERDICT_LABELS: tuple[str, ...] = (*JUDGE_LABELS, "error")
-# Icône affichée pour chaque verdict dans les résumés et rapports.
+# Icon shown for each verdict in summaries and reports.
 VERDICT_ICONS: dict[str, str] = {
     "supported": "✓", "contradicted": "✗", "contested": "⚠", "unverifiable": "?", "error": "!",
 }
 
 
-# --- Indexation ---------------------------------------------------------------
+# --- Indexing -----------------------------------------------------------------
 
 class Document(BaseModel):
-    """Un fichier du corpus, converti en texte brut."""
+    """A corpus file, converted to plain text."""
     doc_id: str
     filename: str
     source_type: str
@@ -51,28 +51,28 @@ class Document(BaseModel):
 
 
 class CleanedDocument(BaseModel):
-    """Sortie du nettoyage : le document réparé, et ce que chaque règle a changé."""
+    """The cleaner's output: the repaired document, and what each rule changed."""
     document: Document
     characters_before: int
-    changes: dict[str, int] = {}  # règle -> nombre de réparations
+    changes: dict[str, int] = {}  # rule -> number of repairs
 
 
 class Chunk(BaseModel):
-    """Un morceau de document, l'unité stockée et recherchée."""
+    """A piece of a document, the unit stored and searched."""
     chunk_id: str
     doc_id: str
     filename: str
     source_type: str
     chunk_index: int
     text: str
-    tokens: int | None = None  # taille en tokens de l'embedder (absente des runs plus anciens)
-    embedding: list[float] | None = None  # rempli par l'embedder
+    tokens: int | None = None  # size in the embedder's tokens (absent from older runs)
+    embedding: list[float] | None = None  # filled in by the embedder
 
 
-# --- Réponse à une question ----------------------------------------------------
+# --- Answering a question ------------------------------------------------------
 
 class Passage(BaseModel):
-    """Un chunk renvoyé par le retriever, avec son score de similarité."""
+    """A chunk returned by the retriever, with its similarity score."""
     filename: str
     source_type: str
     chunk_index: int
@@ -81,21 +81,21 @@ class Passage(BaseModel):
 
 
 class Draft(BaseModel):
-    """La réponse brouillon, et les passages sur lesquels elle s'appuie."""
+    """The draft answer, and the passages it relies on."""
     question: str
     text: str
     passages: list[Passage]
 
 
 class Claim(BaseModel):
-    """Une affirmation atomique extraite du brouillon."""
+    """An atomic assertion extracted from the draft."""
     id: str
     claim: str
     cited_source: str | None = None
 
 
 class Verdict(BaseModel):
-    """Le jugement porté sur un claim par le vérifieur."""
+    """The verifier's judgment on a claim."""
     claim_id: str
     claim: str
     verdict: VerdictLabel
@@ -103,15 +103,15 @@ class Verdict(BaseModel):
     supporting_sources: list[str] = []
     contradicting_sources: list[str] = []
     original_cited_source: str | None = None
-    verifier: str  # quelle implémentation a jugé (ex. "llm_judge:qwen/qwen3.8-27b")
-    evidence: list[Passage] = []  # les passages que le juge a lus pour ce verdict
+    verifier: str  # which implementation judged (e.g. "llm_judge:qwen/qwen3.8-27b")
+    evidence: list[Passage] = []  # the passages the judge read for this verdict
 
     @model_validator(mode="after")
     def _sources_match_the_verdict(self) -> "Verdict":
-        # Un verdict doit être cohérent avec les sources qu'il cite, quelle que
-        # soit l'implémentation du juge (LLM, classifieur...).
+        # A verdict must be consistent with the sources it cites, whatever the
+        # judge's implementation (LLM, classifier...).
         if self.verdict == "contradicted" and not self.contradicting_sources:
-            raise ValueError("un verdict 'contradicted' doit citer au moins une source qui le contredit")
+            raise ValueError("a 'contradicted' verdict must cite at least one contradicting source")
         if self.verdict == "contested" and not (self.supporting_sources and self.contradicting_sources):
-            raise ValueError("un verdict 'contested' doit citer des sources des deux côtés")
+            raise ValueError("a 'contested' verdict must cite sources on both sides")
         return self

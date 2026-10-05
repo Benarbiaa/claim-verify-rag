@@ -1,32 +1,32 @@
 """
-Pipeline complet — Étapes B + C + D enchaînées automatiquement
-==================================================================
+Full pipeline — Steps B + C + D chained automatically
+=====================================================
 
-Exécute la boucle complète pour une (ou plusieurs) question(s) :
-    question -> retrieval par document -> réponse brouillon (B)
-             -> décomposition en claims (C)
-             -> vérification de chaque claim (D)
+Runs the whole flow for one (or several) question(s):
+    question -> per-document retrieval -> draft answer (B)
+             -> decomposition into claims (C)
+             -> verification of each claim (D)
 
-Les étapes sont construites UNE SEULE FOIS à partir de config.yaml (voir
-factory.py), puis enchaînées en mémoire via leurs interfaces : ce fichier ne
-sait pas quel modèle, quelle base ou quelle bibliothèque chaque étape utilise.
+The stages are built ONCE from config.yaml (see factory.py), then chained in
+memory through their interfaces: this file does not know which model,
+database or library each stage uses.
 
-Chaque run a son dossier runs/<run_id>/ : events.jsonl (la sortie de chaque étape,
-voir events.py) et un rapport (report.json + report.md) avec :
-    - la réponse brouillon, les claims, les verdicts
-    - le temps de chaque étape (utile pour du benchmarking modèle/paramètres)
-    - un résumé agrégé si plusieurs questions sont passées en une fois
-    - la configuration complète utilisée (pour reproduire le run)
+Each run has its folder runs/<run_id>/: events.jsonl (each stage's output,
+see events.py) and a report (report.json + report.md) with:
+    - the draft answer, the claims, the verdicts
+    - the duration of each stage (useful to benchmark models and settings)
+    - an aggregated summary when several questions are run at once
+    - the full configuration used (to reproduce the run)
 
---db_url est facultatif si DB_URL est dans .env (voir config.py), et
---config vaut config.yaml par défaut.
+--db_url is optional when DB_URL is in .env (see config.py), and --config
+defaults to config.yaml.
 
-Usage (une question) :
+Usage (one question):
     python -m claimverify.answering.pipeline \
         --query "Does semantic chunking improve retrieval performance?"
 
-Usage (plusieurs questions, fichier texte avec une question par ligne,
-lignes vides et lignes commençant par # ignorées) :
+Usage (several questions, a text file with one question per line; blank
+lines and lines starting with # are ignored):
     python -m claimverify.answering.pipeline \
         --questions_file eval_questions.txt
 """
@@ -57,19 +57,19 @@ from claimverify.settings import LLMStageSettings, Settings, add_config_argument
 
 def run_single_question(query: str, stages: AnsweringStages, run: Run,
                         question_index: int = 1) -> dict:
-    """Exécute B -> C -> D pour une seule question, émet un événement après
-    chaque étape (et après chaque verdict), et retourne un dict complet
-    (réponse, claims, verdicts, timings) pour le rapport."""
+    """Runs B -> C -> D for a single question, emits an event after each stage
+    (and after each verdict), and returns a full dict (answer, claims,
+    verdicts, timings) for the report."""
     timings = {}
     t0 = time.perf_counter()
-    stages.meter.take()  # l'usage de chaque étape se compte à partir d'ici
-    # chaque attente avant une nouvelle tentative devient un événement, émis tout de suite
+    stages.meter.take()  # each stage's usage is counted from here
+    # each wait before a new attempt becomes an event, emitted at once
     stages.meter.on_wait = lambda w: run.emit(
         LLMWaiting, question_index=question_index, role=w.role, model=w.model,
         seconds=w.seconds, attempt=w.attempt, reason=w.reason)
     run.emit(QuestionStarted, question_index=question_index, question=query)
 
-    # --- Étape B : réponse brouillon ---
+    # --- Step B: draft answer ---
     passages = stages.retriever.retrieve(query)
     docs_covered = sorted({p.filename for p in passages})
     t1 = time.perf_counter()
@@ -83,14 +83,14 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     timings["retrieval_draft_seconds"] = round(t1 - t0, 2)
     timings["generation_draft_seconds"] = round(t2 - t1, 2)
 
-    # --- Étape C : décomposition en claims ---
+    # --- Step C: decomposition into claims ---
     claims = stages.decomposer.decompose(draft)
     t3 = time.perf_counter()
     run.emit(ClaimsExtracted, question_index=question_index, claims=claims, seconds=t3 - t2,
              usage=stages.meter.take())
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
-    # --- Étape D : vérification, un événement par verdict dès qu'il est prêt ---
+    # --- Step D: verification, one event per verdict as soon as it is ready ---
     verdicts = []
     for position, verdict in enumerate(stages.verifier.verify(claims), 1):
         verdicts.append(verdict)
@@ -106,7 +106,7 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     run.emit(QuestionFinished, question_index=question_index, verdict_counts=counts,
              seconds=t4 - t0)
 
-    # Le rapport est du JSON : on y met les contrats sous forme de dicts.
+    # The report is JSON: the contracts go in as dicts.
     return {
         "query": query,
         "draft_answer_docs_covered": docs_covered,
@@ -212,14 +212,14 @@ def main():
     add_db_url_argument(parser)
     add_config_argument(parser)
     parser.add_argument("--query", type=str, default=None,
-                         help="Une seule question à traiter.")
+                         help="A single question to answer.")
     parser.add_argument("--questions_file", type=str, default=None,
-                         help="Fichier texte avec une question par ligne, pour traiter "
-                              "plusieurs questions en un seul run (benchmarking).")
+                         help="Text file with one question per line, to answer "
+                              "several questions in one run (benchmarking).")
     args = parser.parse_args()
 
     if not args.query and not args.questions_file:
-        raise RuntimeError("Fournir soit --query, soit --questions_file.")
+        raise RuntimeError("Give either --query or --questions_file.")
 
     settings = load_settings(args.config)
     a = settings.answering
@@ -233,7 +233,7 @@ def main():
 
     questions = load_questions(args)
 
-    # Échoue ici, avant tout calcul, si une clé API manque.
+    # Fails here, before any work, if an API key is missing.
     conn = psycopg2.connect(args.db_url)
     stages = build_answering(settings, conn)
 
@@ -256,8 +256,8 @@ def main():
         "embedding_model": settings.embedding.model,
         "draft_top_k_per_doc": a.retriever.top_k_per_doc,
         "verify_top_k_per_doc": a.verifier.retriever.top_k_per_doc,
-        "config": settings.model_dump(),  # tout config.yaml, pour reproduire le run
-        # appels, tokens, nouvelles tentatives et attente, par rôle (draft, decompose, verify)
+        "config": settings.model_dump(),  # all of config.yaml, to reproduce the run
+        # calls, tokens, retries and waiting, per role (draft, decompose, verify)
         "usage": {role: u.model_dump() for role, u in stages.meter.totals_by_role().items()},
     }
     with open(run.dir / "report.json", "w", encoding="utf-8") as f:

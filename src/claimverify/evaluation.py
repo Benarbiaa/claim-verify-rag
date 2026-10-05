@@ -1,26 +1,27 @@
 """
-Évaluation — le gold set de claims et sa vérification
-======================================================
+Evaluation — the gold set of claims, the retrieval set, and their checks
+========================================================================
 
-Le gold set (eval/claims_gold.jsonl) contient des claims dont le bon verdict
-est connu À L'AVANCE, indépendamment du système, et PROUVÉ par une citation
-exacte de la source. Le vérificateur est évalué en comparant ses verdicts à
-ces réponses. Les étiquettes sont relues par un humain : une erreur ici
-deviendrait "la vérité" de toutes les mesures.
+The gold set (eval/claims_gold.jsonl) holds claims whose right verdict is
+known IN ADVANCE, independently of the system, and PROVEN by an exact quote
+from the source. The verifier is evaluated by comparing its verdicts with
+these answers. The labels are reviewed by a human: a mistake here would
+become "the truth" of every measurement.
 
-Ce module définit le format (GoldClaim) et refuse un gold set incohérent avant
-toute mesure : étiquette impossible, sources incompatibles avec l'étiquette,
-fichier absent du corpus, ou citation introuvable dans le texte stocké.
+This module defines the format (GoldClaim) and refuses an inconsistent gold
+set before any measurement: an impossible label, sources incompatible with
+the label, a file missing from the corpus, or a quote not found in the
+stored text.
 
-Le jeu de retrieval (eval/retrieval_set.jsonl) est plus simple et plus grand :
-des paires claim -> citation, sans verdict. Il ne sert qu'à mesurer si la
-recherche ramène la preuve (retrieval_eval.py) : aucune étiquette à relire,
-aucun appel LLM, donc on peut se permettre plus d'exemples.
+The retrieval set (eval/retrieval_set.jsonl) is simpler and larger: claim ->
+quote pairs, with no verdict. It only measures whether the search brings
+back the proof (retrieval_eval.py): no label to review, no LLM call, so more
+items are affordable.
 
-Usage :
-    python -m claimverify.evaluation check-gold         (aucun appel LLM, aucune base)
-    python -m claimverify.evaluation retrieval          (aucun appel LLM ; GPU pour l'embedding)
-    python -m claimverify.evaluation judge              (APPELS LLM : le juge sur le gold set)
+Usage:
+    python -m claimverify.evaluation check-gold         (no LLM call, no database)
+    python -m claimverify.evaluation retrieval          (no LLM call; GPU for the embedding)
+    python -m claimverify.evaluation judge              (LLM CALLS: the judge on the gold set)
 """
 
 import argparse
@@ -47,11 +48,11 @@ CATEGORIES: tuple[str, ...] = get_args(Category)
 
 
 class GoldEvidence(BaseModel):
-    """Une citation exacte d'une source, et ce qu'elle fait du claim."""
+    """An exact quote from a source, and what it does to the claim."""
     model_config = ConfigDict(extra="forbid")
     filename: str
     stance: Literal["supports", "contradicts"]
-    quote: str = Field(min_length=20)  # une phrase, pas un mot isolé
+    quote: str = Field(min_length=20)  # a sentence, not an isolated word
 
 
 class GoldClaim(BaseModel):
@@ -59,30 +60,30 @@ class GoldClaim(BaseModel):
     id: str
     category: Category
     claim: str = Field(min_length=10)
-    expected: JudgeLabel  # jamais "error" : c'est un échec du juge, pas une conclusion
+    expected: JudgeLabel  # never "error": that is a failure of the judge, not a conclusion
     evidence: list[GoldEvidence] = []
-    note: str = ""        # pourquoi cette étiquette, en une ligne
+    note: str = ""        # why this label, in one line
 
     @model_validator(mode="after")
     def _evidence_matches_the_label(self) -> "GoldClaim":
-        # Plus strict que le contrat Verdict : le gold set est la référence.
+        # Stricter than the Verdict contract: the gold set is the reference.
         pro = {e.filename for e in self.evidence if e.stance == "supports"}
         con = {e.filename for e in self.evidence if e.stance == "contradicts"}
         rules = {
-            "supported": (pro and not con, "au moins une citation pour, aucune contre"),
-            "contradicted": (con and not pro, "au moins une citation contre, aucune pour"),
-            # "contested" : les SOURCES se contredisent entre elles, donc deux documents différents
-            "contested": (pro and con and len(pro | con) >= 2, "des citations des deux côtés, de documents différents"),
-            "unverifiable": (not self.evidence, "aucune citation (le corpus n'en parle pas)"),
+            "supported": (pro and not con, "at least one quote for, none against"),
+            "contradicted": (con and not pro, "at least one quote against, none for"),
+            # "contested": the SOURCES contradict each other, so two different documents
+            "contested": (pro and con and len(pro | con) >= 2, "quotes on both sides, from different documents"),
+            "unverifiable": (not self.evidence, "no quote (the corpus does not discuss it)"),
         }
         ok, rule = rules[self.expected]
         if not ok:
-            raise ValueError(f"'{self.expected}' demande {rule}")
+            raise ValueError(f"'{self.expected}' needs {rule}")
         return self
 
 
 class RetrievalPair(BaseModel):
-    """Un claim et la citation que la recherche devrait ramener (sans verdict)."""
+    """A claim and the quote the search should bring back (no verdict)."""
     model_config = ConfigDict(extra="forbid")
     id: str
     claim: str = Field(min_length=10)
@@ -91,8 +92,8 @@ class RetrievalPair(BaseModel):
 
 
 def _load_jsonl(path: Path, model: type[M]) -> list[M]:
-    """Une ligne JSON par objet ; les lignes vides sont ignorées. Une erreur
-    indique la ligne fautive."""
+    """One JSON line per object; blank lines are ignored. An error names the
+    faulty line."""
     items = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
@@ -100,7 +101,7 @@ def _load_jsonl(path: Path, model: type[M]) -> list[M]:
         try:
             items.append(model.model_validate(json.loads(line)))
         except (json.JSONDecodeError, ValidationError) as e:
-            raise ValueError(f"{path}, ligne {number} : {e}") from e
+            raise ValueError(f"{path}, line {number}: {e}") from e
     return items
 
 
@@ -113,44 +114,43 @@ def load_retrieval_set(path: Path) -> list[RetrievalPair]:
 
 
 def check_gold(claims: list[GoldClaim], documents: dict[str, str]) -> list[str]:
-    """Problèmes du gold set face au corpus (documents : nom de fichier ->
-    texte STOCKÉ, c'est-à-dire nettoyé). Liste vide = gold set utilisable."""
+    """The gold set's problems against the corpus (documents: filename ->
+    STORED text, i.e. cleaned). An empty list = a usable gold set."""
     problems = []
     for claim_id, n in Counter(c.id for c in claims).items():
         if n > 1:
-            problems.append(f"id en double : {claim_id} ({n} fois)")
+            problems.append(f"duplicate id: {claim_id} ({n} times)")
     for category in CATEGORIES:
         if not any(c.category == category for c in claims):
-            problems.append(f"aucun claim dans la catégorie {category}")
+            problems.append(f"no claim in the category {category}")
 
     quotes = [(c.id, e.filename, e.quote) for c in claims for e in c.evidence]
     return problems + _quote_problems(quotes, documents)
 
 
 def check_retrieval_set(pairs: list[RetrievalPair], documents: dict[str, str]) -> list[str]:
-    problems = [f"id en double : {pair_id} ({n} fois)"
+    problems = [f"duplicate id: {pair_id} ({n} times)"
                 for pair_id, n in Counter(p.id for p in pairs).items() if n > 1]
     return problems + _quote_problems([(p.id, p.filename, p.quote) for p in pairs], documents)
 
 
 def _quote_problems(quotes: list[tuple[str, str, str]], documents: dict[str, str]) -> list[str]:
-    # Comparaison sans espaces, retours à la ligne ni traits d'union : une
-    # citation copiée depuis le PDF ou depuis le texte stocké est retrouvée,
-    # une citation inventée ou modifiée ne l'est pas.
+    # Compared without spaces, line breaks or hyphens: a quote copied from the
+    # PDF or from the stored text is found, an invented or altered one is not.
     signatures = {name: content_signature(text) for name, text in documents.items()}
     problems = []
     for item_id, filename, quote in quotes:
         if filename not in documents:
-            problems.append(f"{item_id} : {filename} n'est pas dans le corpus")
+            problems.append(f"{item_id}: {filename} is not in the corpus")
         elif content_signature(quote) not in signatures[filename]:
-            problems.append(f"{item_id} : citation introuvable dans {filename} : « {quote[:60]}… »")
+            problems.append(f"{item_id}: quote not found in {filename}: \"{quote[:60]}…\"")
     return problems
 
 
 def corpus_documents(settings) -> list[Document]:
-    """Les documents tels qu'ils sont stockés : chargés puis nettoyés par les
-    étapes de config.yaml (sans embedder ni base)."""
-    from claimverify.factory import build_cleaner, build_loader  # import local : factory est lourde
+    """The documents as stored: loaded then cleaned by config.yaml's stages
+    (no embedder, no database)."""
+    from claimverify.factory import build_cleaner, build_loader  # local import: factory is heavy
 
     documents = build_loader(settings).load(CORPUS_DIR)
     return [c.document for c in build_cleaner(settings).clean(documents)]
@@ -161,8 +161,8 @@ def corpus_texts(settings) -> dict[str, str]:
 
 
 def retrieval_targets(claims: list[GoldClaim], pairs: list[RetrievalPair]):
-    """Chaque citation du gold set et du jeu de retrieval devient une cible
-    (g02.1, g02.2 quand un claim en a plusieurs)."""
+    """Each quote of the gold set and of the retrieval set becomes a target
+    (g02.1, g02.2 when a claim has several)."""
     from claimverify.retrieval_eval import Target
 
     targets = []
@@ -173,15 +173,15 @@ def retrieval_targets(claims: list[GoldClaim], pairs: list[RetrievalPair]):
     return targets + [Target(p.id, p.claim, p.filename, p.quote) for p in pairs]
 
 
-# Règle fixée AVANT la mesure, pour ne pas choisir le seuil après avoir vu les chiffres :
-# une méthode remplace la recherche actuelle si elle gagne au moins MIN_NET_GAIN citations
-# nettes au k du juge, sans qu'aucun document ne perde de preuves.
+# Rule fixed BEFORE measuring, so the threshold is not chosen after seeing the numbers:
+# a method replaces the current search if it gains at least MIN_NET_GAIN quotes net at
+# the judge's k, with no document losing proofs.
 MIN_NET_GAIN = 4
 
 
 def retrieval_report(results: dict[tuple[int, str], list], current_size: int, judge_k: int) -> str:
-    """Le rapport en Markdown. `results` : (taille de chunk, méthode) -> résultats.
-    La référence est la recherche actuelle : taille de config.yaml, méthode dense."""
+    """The report in Markdown. `results`: (chunk size, method) -> results.
+    The reference is today's search: config.yaml's chunk size, dense method."""
     from claimverify.retrieval_eval import K_VALUES, paired_changes, recall_at, wilson_interval
 
     def pct(hits: int, n: int) -> str:
@@ -260,12 +260,12 @@ def run_retrieval(args) -> None:
     claims, pairs = load_gold(args.gold), load_retrieval_set(args.set)
     problems = check_gold(claims, texts) + check_retrieval_set(pairs, texts)
     if problems:
-        sys.exit("Jeux d'évaluation invalides :\n  - " + "\n  - ".join(problems))
+        sys.exit("Invalid evaluation sets:\n  - " + "\n  - ".join(problems))
 
     targets = retrieval_targets(claims, pairs)
     chunker_cfg = settings.indexing.chunker
     sizes = sorted(set(args.chunk_sizes or []) | {chunker_cfg.chunk_size})
-    methods = list(dict.fromkeys(["dense", *args.methods]))  # dense : la référence, toujours mesurée
+    methods = list(dict.fromkeys(["dense", *args.methods]))  # dense: the reference, always measured
     embedder = build_embedder(settings)
     reranker = None
     if "rerank" in methods:
@@ -284,13 +284,13 @@ def run_retrieval(args) -> None:
                               settings.answering.verifier.retriever.top_k_per_doc)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(report, encoding="utf-8")
-    print("\n" + report + f"\nÉcrit dans {args.out}")
+    print("\n" + report + f"\nWritten to {args.out}")
 
 
 def run_judge(args) -> None:
-    """Le vérificateur de config.yaml sur chaque claim du gold set (APPELS LLM).
-    Chaque verdict est écrit dès qu'il arrive : un arrêt (limite journalière)
-    ne perd pas ce qui est déjà payé, et --resume reprend sans le repayer."""
+    """config.yaml's verifier on each claim of the gold set (LLM CALLS). Each
+    verdict is written as soon as it arrives: a stop (daily limit) loses
+    nothing already paid for, and --resume continues without paying again."""
     import psycopg2
 
     from claimverify.contracts import Claim, Verdict
@@ -303,7 +303,7 @@ def run_judge(args) -> None:
     gold = load_gold(args.gold)
     problems = check_gold(gold, corpus_texts(settings))
     if problems:
-        sys.exit("Gold set invalide :\n  - " + "\n  - ".join(problems))
+        sys.exit("Invalid gold set:\n  - " + "\n  - ".join(problems))
 
     verdicts: dict[str, Verdict] = {}
     if args.resume and args.verdicts.exists():
@@ -339,7 +339,7 @@ def run_judge(args) -> None:
     judge = settings.answering.verifier.judge.model
     text = report(score(gold, verdicts), judge, note)
     args.out.write_text(text, encoding="utf-8")
-    print("\n" + text + f"\nÉcrit dans {args.out} (verdicts : {args.verdicts})")
+    print("\n" + text + f"\nWritten to {args.out} (verdicts: {args.verdicts})")
 
 
 def main():
@@ -348,23 +348,23 @@ def main():
 
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
-    check = commands.add_parser("check-gold", help="Vérifie le gold set (aucun appel LLM).")
+    check = commands.add_parser("check-gold", help="Checks the gold set (no LLM call).")
     check.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
     add_config_argument(check)
-    retrieval = commands.add_parser("retrieval", help="La recherche ramène-t-elle les preuves ? (aucun appel LLM)")
+    retrieval = commands.add_parser("retrieval", help="Does the search bring back the proofs? (no LLM call)")
     retrieval.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
     retrieval.add_argument("--set", type=Path, default=DEFAULT_RETRIEVAL_SET_PATH)
     retrieval.add_argument("--chunk-sizes", type=int, nargs="*", default=None,
-                           help="Tailles de chunks à comparer, en plus de celle de config.yaml (ex. 256 510).")
+                           help="Chunk sizes to compare, besides config.yaml's (e.g. 256 510).")
     retrieval.add_argument("--methods", nargs="*", default=["dense"], choices=["dense", "bm25", "hybrid", "rerank"],
-                           help="Méthodes de recherche à comparer à la recherche actuelle (dense).")
+                           help="Search methods to compare with today's search (dense).")
     retrieval.add_argument("--out", type=Path, default=Path("eval/results/retrieval.md"))
     add_config_argument(retrieval)
-    judge = commands.add_parser("judge", help="Le vérificateur sur le gold set (APPELS LLM : coûte du quota).")
+    judge = commands.add_parser("judge", help="The verifier on the gold set (LLM CALLS: costs quota).")
     judge.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
     judge.add_argument("--verdicts", type=Path, default=Path("eval/results/judge_verdicts.jsonl"))
     judge.add_argument("--out", type=Path, default=Path("eval/results/judge.md"))
-    judge.add_argument("--resume", action="store_true", help="Garde les verdicts déjà écrits, demande les autres.")
+    judge.add_argument("--resume", action="store_true", help="Keeps the verdicts already written, asks for the others.")
     add_config_argument(judge)
     add_db_url_argument(judge)
     args = parser.parse_args()
@@ -379,16 +379,16 @@ def main():
     claims = load_gold(args.gold)
     problems = check_gold(claims, corpus_texts(load_settings(args.config)))
 
-    print(f"{len(claims)} claims dans {args.gold}")
+    print(f"{len(claims)} claims in {args.gold}")
     for category in CATEGORIES:
         labels = Counter(c.expected for c in claims if c.category == category)
         print(f"  {category:22} {sum(labels.values())}  " + ", ".join(f"{n} {lab}" for lab, n in labels.items()))
     if problems:
-        print(f"\n{len(problems)} problème(s) :")
+        print(f"\n{len(problems)} problem(s):")
         for p in problems:
             print(f"  - {p}")
         sys.exit(1)
-    print("\nGold set valide.")
+    print("\nGold set valid.")
 
 
 if __name__ == "__main__":

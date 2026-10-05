@@ -1,20 +1,19 @@
 """
-Vérification de retrieval — sanity check avant d'attaquer l'agent LangGraph
-=============================================================================
+Retrieval check — a sanity check of the search, with no LLM
+===========================================================
 
-Interroge la base pgvector avec quelques questions de test et affiche les
-chunks les plus proches, pour vérifier manuellement que le retrieval a du
-sens avant de construire la vérification par-dessus.
+Queries the database with a few test questions and prints the closest
+chunks, to check by hand that retrieval makes sense.
 
-Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+Usage (--db_url is optional when DB_URL is in .env, see config.py):
     python -m claimverify.answering.query_check
     python -m claimverify.answering.query_check --query "Does semantic chunking improve retrieval?"
     python -m claimverify.answering.query_check --query "..." --per_document
 
---per_document montre ce que reçoit le DRAFTER : le même retriever que le
-pipeline, construit par la factory depuis config.yaml (answering.retriever).
-Le juge a son propre retriever (answering.verifier.retriever) : pour ce qu'il
-lit, voir `verification --debug_claim`.
+--per_document shows what the DRAFTER receives: the same retriever as the
+pipeline, built by the factory from config.yaml (answering.retriever). The
+judge has its own retriever (answering.verifier.retriever): for what it
+reads, see `verification --debug_claim`.
 """
 
 import argparse
@@ -28,10 +27,10 @@ from claimverify.settings import add_config_argument, load_settings
 
 TOP_K = 5
 
-# Quelques questions de test couvrant les axes attendus du corpus :
-# - une question où deux papiers du corpus sont censés être en désaccord
-# - une question factuelle simple (cas "supporté" propre)
-# - une question sur un axe différent (enrichissement de chunk, pas méthode de chunking)
+# A few test questions covering the corpus's expected axes:
+# - a question on which two papers of the corpus should disagree
+# - a simple factual question (a clean "supported" case)
+# - a question on a different axis (enriching chunks, not how to cut them)
 DEFAULT_TEST_QUERIES = [
     "Does semantic chunking improve retrieval performance compared to fixed-size chunking?",
     "What is the original definition of Retrieval-Augmented Generation?",
@@ -56,15 +55,15 @@ def main():
     add_db_url_argument(parser)
     add_config_argument(parser)
     parser.add_argument("--query", type=str, default=None,
-                         help="Si fourni, exécute uniquement cette question au lieu du jeu par défaut.")
+                         help="If given, runs only this question instead of the default set.")
     parser.add_argument("--top_k", type=int, default=TOP_K)
     parser.add_argument("--per_document", action="store_true",
-                         help="Utilise la recherche par document (top-k par source) "
-                              "au lieu du top-k global. C'est le mode utilisé pour "
-                              "la génération de réponse et la vérification de claims.")
+                         help="Uses the per-document search (top-k per source) "
+                              "instead of the global top-k. This is the mode used for "
+                              "drafting and claim verification.")
     parser.add_argument("--top_k_per_doc", type=int, default=None,
-                         help="Remplace pour ce run le top_k_per_doc de config.yaml "
-                              "(answering.retriever), pour comparer.")
+                         help="Overrides config.yaml's top_k_per_doc for this run "
+                              "(answering.retriever), to compare.")
     args = parser.parse_args()
 
     settings = load_settings(args.config)

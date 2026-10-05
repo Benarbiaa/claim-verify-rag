@@ -92,7 +92,7 @@ def test_a_daily_limit_stops_instead_of_waiting_minutes():
 
 def test_gives_up_after_max_retries():
     llm, sleeps = llm_with(*[status_error(500)] * 4, answer(), max_retries=2)
-    with pytest.raises(LLMCallError, match="3 tentatives"):
+    with pytest.raises(LLMCallError, match="3 attempts"):
         llm.chat([])
     assert len(sleeps) == 2
 

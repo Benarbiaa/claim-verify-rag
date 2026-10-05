@@ -135,11 +135,11 @@ def test_an_exact_word_breaks_a_tie_between_chunks_on_the_same_topic():
 
     assert idx.find(target, "bm25").rank == 1
     assert idx.find(target, "hybrid").rank == 1
-    with pytest.raises(ValueError, match="méthode inconnue"):
+    with pytest.raises(ValueError, match="unknown method"):
         idx.ranking("beta", "b.pdf", "magic")
 
 
 @pytest.mark.parametrize("bad", ["not in the text at all, really", "alpha alpha alpha"])
 def test_a_missing_quote_is_an_error_not_a_miss(bad):
-    with pytest.raises(ValueError, match="citation introuvable"):
+    with pytest.raises(ValueError, match="quote not found"):
         index().find(Target("t", "c", "a.pdf", bad))

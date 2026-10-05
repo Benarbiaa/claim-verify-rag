@@ -1,17 +1,17 @@
 """
-Pipeline d'indexation — Étape A
-=================================
+Indexing pipeline — Step A
+==========================
 
-Étapes : charger -> nettoyer -> chunker -> embedder -> stocker (pgvector)
-Les implémentations et leurs réglages viennent de config.yaml (section
-indexing, et embedding qui est partagée avec le pipeline de réponse) ; ce
-fichier ne fait que les enchaîner, via leurs interfaces, et émet un
-événement après chaque étape (voir events.py) : une ligne dans le terminal,
-et la sortie complète dans runs/<run_id>/events.jsonl.
+Stages: load -> clean -> chunk -> embed -> store (pgvector)
+The implementations and their settings come from config.yaml (the indexing
+section, and embedding, which is shared with the answering pipeline); this
+file only chains them through their interfaces and emits an event after each
+stage (see events.py): one line in the terminal, and the full output in
+runs/<run_id>/events.jsonl.
 
-Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+Usage (--db_url is optional when DB_URL is in .env, see config.py):
     python -m claimverify.indexing.ingest --corpus_dir ./data/corpus
-    python -m claimverify.indexing.ingest --corpus_dir ./data/corpus --config autre.yaml
+    python -m claimverify.indexing.ingest --corpus_dir ./data/corpus --config other.yaml
 """
 
 import argparse

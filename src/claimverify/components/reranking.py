@@ -1,17 +1,17 @@
 """
-Reranking — relire chaque candidat AVEC le claim
-=================================================
+Reranking — rereading each candidate TOGETHER with the claim
+============================================================
 
-L'embedding est un bi-encodeur : il transforme le claim et chaque chunk en
-vecteurs SÉPARÉMENT, puis les compare. Il capte le sujet, pas la réponse.
+The embedder is a bi-encoder: it turns the claim and each chunk into vectors
+SEPARATELY, then compares them. It captures the topic, not the answer.
 
-Un cross-encodeur lit le claim et un chunk ENSEMBLE, dans une seule entrée :
-son attention relie chaque mot de l'un à chaque mot de l'autre, et il juge si
-le chunk répond au claim. Trop lent pour tout le corpus (un passage du modèle
-par paire), il ne fait que RE-TRIER une courte liste de candidats ramenés par
-la recherche.
+A cross-encoder reads the claim and a chunk TOGETHER, in a single input: its
+attention links every word of one to every word of the other, and it judges
+whether the chunk answers the claim. Too slow for the whole corpus (one model
+pass per pair), it only RE-SORTS a short list of candidates brought by the
+search.
 
-Le modèle tourne en local (GPU) : aucun appel d'API.
+The model runs locally (GPU): no API call.
 """
 
 from functools import cached_property
@@ -22,13 +22,13 @@ RERANKER_MODEL = "BAAI/bge-reranker-base"
 
 @runtime_checkable
 class Reranker(Protocol):
-    """Interface : un score de pertinence par texte, pour une requête."""
+    """Interface: one relevance score per text, for a query."""
 
     def scores(self, query: str, texts: list[str]) -> list[float]: ...
 
 
 class CrossEncoderReranker:
-    """Implémentation : un cross-encodeur de sentence-transformers."""
+    """Implementation: a sentence-transformers cross-encoder."""
 
     def __init__(self, model_name: str = RERANKER_MODEL, device: str = "cuda"):
         self.model_name = model_name
@@ -36,7 +36,7 @@ class CrossEncoderReranker:
 
     @cached_property
     def model(self):
-        # Chargé au premier usage seulement, comme l'embedder.
+        # Loaded on first use only, like the embedder.
         from sentence_transformers import CrossEncoder
         return CrossEncoder(self.model_name, device=self.device)
 
@@ -47,7 +47,7 @@ class CrossEncoderReranker:
 
 
 def rerank(query: str, candidates: list[int], texts: list[str], reranker: Reranker) -> list[int]:
-    """Re-trie `candidates` (indices dans `texts`) du plus au moins pertinent."""
+    """Re-sorts `candidates` (indices into `texts`) from most to least relevant."""
     scores = reranker.scores(query, [texts[i] for i in candidates])
     order = sorted(range(len(candidates)), key=lambda j: scores[j], reverse=True)
     return [candidates[j] for j in order]

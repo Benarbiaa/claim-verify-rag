@@ -1,25 +1,25 @@
 """
-Nettoyage — réparer le texte extrait des PDF, sans toucher au contenu
-=======================================================================
+Cleaning — repairing text extracted from PDFs, without touching the content
+===========================================================================
 
-L'extraction PDF (pypdf) restitue la mise en page, pas le texte des auteurs :
-mots coupés en fin de ligne, ligatures, numéros de page au milieu des phrases.
-Ce module répare UNIQUEMENT ces artefacts. Il ne retire aucune section
-(références, annexes) et ne décide jamais de ce qui est du contenu : le
-corpus peut s'élargir à des documents qu'aucune règle spécifique ne prévoit.
+PDF extraction (pypdf) gives back the layout, not the authors' text: words
+split at line ends, ligatures, page numbers in the middle of sentences. This
+module repairs ONLY these artifacts. It removes no section (references,
+appendices) and never decides what is content: the corpus may grow to
+documents no specific rule foresees.
 
-Règles, dans cet ordre (PDF seulement ; un Markdown est écrit à la main) :
-    1. numéros de page : dernière ligne d'une page, si elle vaut le numéro de
-       cette page (une valeur de tableau n'est jamais touchée)
-    2. NFKC : formes Unicode de compatibilité (ﬁ -> fi, x² -> x2, espace insécable -> espace)
-    3. espaces : tabulations et espaces répétés -> un espace ; les retours à la ligne restent
-    4. mots coupés en fin de ligne : recollés si le document contient le mot
-       recollé ailleurs, sinon seul le retour à la ligne est retiré et le
-       trait d'union reste (cross-encoder, non-parametric)
+Rules, in this order (PDF only; a Markdown file is written by hand):
+    1. page numbers: the last line of a page, if it equals that page's
+       number (a table value is never touched)
+    2. NFKC: Unicode compatibility forms (ﬁ -> fi, x² -> x2, no-break space -> space)
+    3. spaces: tabs and repeated spaces -> one space; line breaks stay
+    4. words split at line ends: joined if the document uses the joined word
+       elsewhere, otherwise only the line break goes and the hyphen stays
+       (cross-encoder, non-parametric)
 
-Garantie, vérifiée à chaque document : en ignorant espaces, retours à la
-ligne et traits d'union, le texte nettoyé est identique au texte brut
-(après NFKC), numéros de page retirés exceptés. Sinon : erreur.
+Guarantee, checked on every document: ignoring spaces, line breaks and
+hyphens, the cleaned text equals the raw text (after NFKC), removed page
+numbers aside. Otherwise: an error.
 """
 
 import re
@@ -30,21 +30,21 @@ from typing import Protocol, runtime_checkable
 from claimverify.contracts import CleanedDocument, Document
 from claimverify.indexing.loading import PAGE_BREAK
 
-_SPACES = re.compile(r"[^\S\n]+")              # tout blanc sauf le retour à la ligne
+_SPACES = re.compile(r"[^\S\n]+")              # any blank except a line break
 _SPACES_AROUND_NEWLINE = re.compile(r" ?\n ?")
 _LINE_END_HYPHEN = re.compile(r"(\w+)-\n(\w+)")
-_WORD = re.compile(r"\w+(?:-\w+)*")            # un mot composé (non-parametric) compte pour un
+_WORD = re.compile(r"\w+(?:-\w+)*")            # a compound word (non-parametric) counts as one
 
 
 @runtime_checkable
 class Cleaner(Protocol):
-    """Interface : répare le texte des Documents, sans en retirer le contenu."""
+    """Interface: repairs the text of Documents, without removing content."""
 
     def clean(self, documents: list[Document]) -> list[CleanedDocument]: ...
 
 
 class NoCleaner:
-    """Implémentation : texte inchangé (pour comparer brut et nettoyé)."""
+    """Implementation: text unchanged (to compare raw and cleaned)."""
 
     def clean(self, documents: list[Document]) -> list[CleanedDocument]:
         return [CleanedDocument(document=_join_pages(d), characters_before=len(d.text))
@@ -52,7 +52,7 @@ class NoCleaner:
 
 
 class MinimalCleaner:
-    """Implémentation : les 4 réparations ci-dessus, sur les PDF."""
+    """Implementation: the 4 repairs above, on PDFs."""
 
     def clean(self, documents: list[Document]) -> list[CleanedDocument]:
         return [clean_document(d) for d in documents]
@@ -81,7 +81,7 @@ def clean_document(doc: Document) -> CleanedDocument:
 
 
 def remove_page_numbers(pages: list[str]) -> tuple[list[str], int]:
-    """Retire la dernière ligne de la page n si elle vaut exactement n."""
+    """Removes the last line of page n if it is exactly n."""
     cleaned, removed = [], 0
     for number, page in enumerate(pages, start=1):
         lines = page.rstrip().split("\n")
@@ -97,9 +97,9 @@ def collapse_spaces(text: str) -> str:
 
 
 def rejoin_line_end_hyphens(text: str) -> tuple[str, int, int]:
-    """'rele-\\nvance' -> 'relevance' si 'relevance' apparaît ailleurs dans le
-    texte (et pas 'rele-vance') ; sinon 'cross-\\nencoder' -> 'cross-encoder'.
-    Le document lui-même tranche : aucun dictionnaire, aucune langue supposée."""
+    """'rele-\\nvance' -> 'relevance' if 'relevance' appears elsewhere in the
+    text (and 'rele-vance' does not); otherwise 'cross-\\nencoder' -> 'cross-encoder'.
+    The document itself decides: no dictionary, no assumed language."""
     seen = Counter(w.lower() for w in _WORD.findall(text))
     counts = {"joined": 0, "kept": 0}
 
@@ -116,15 +116,15 @@ def rejoin_line_end_hyphens(text: str) -> tuple[str, int, int]:
 
 
 def content_signature(text: str) -> str:
-    """Le texte sans ce que le nettoyage a le droit de changer."""
+    """The text without what the cleaning is allowed to change."""
     return re.sub(r"[\s-]", "", unicodedata.normalize("NFKC", text))
 
 
 def check_no_content_lost(raw: str, cleaned: str, filename: str) -> None:
     if content_signature(raw) != content_signature(cleaned):
-        raise RuntimeError(f"{filename} : le nettoyage a modifié le contenu (bug dans cleaning.py).")
+        raise RuntimeError(f"{filename}: the cleaning changed the content (a bug in cleaning.py).")
 
 
 def _join_pages(doc: Document) -> Document:
-    # Sans nettoyage, le séparateur de pages devient un simple retour à la ligne.
+    # Without cleaning, the page separator becomes a plain line break.
     return doc.model_copy(update={"text": doc.text.replace(PAGE_BREAK, "\n")})

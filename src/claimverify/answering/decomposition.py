@@ -1,26 +1,23 @@
 """
-Décomposition en claims atomiques — Étape C
-==============================================
+Decomposition into atomic claims — Step C
+=========================================
 
-Prend une réponse brouillon (texte généré à l'étape B) et la décompose en
-une liste de claims atomiques, indépendants et vérifiables individuellement.
+Takes a draft answer (the text written in step B) and splits it into a list
+of atomic claims, independent and verifiable one by one.
 
-Aucun retrieval ici : c'est une transformation de texte pure, via un second
-appel LLM dédié à cette seule tâche (séparé de la génération de la réponse,
-pour garder chaque étape testable indépendamment).
+No retrieval here: it is a pure text transformation, through a second LLM
+call dedicated to this single task (separate from drafting, so each step can
+be tested on its own).
 
-Prérequis :
-    pip install openai python-dotenv
+Input: a Draft. Output: a list of Claim (see contracts.py). Every claim the
+LLM returns is validated here: a malformed claim stops the run at this step,
+with a clear message, instead of crashing the verification.
 
-Entrée : un Draft. Sortie : une liste de Claim (voir contracts.py). Chaque
-claim renvoyé par le LLM est validé ici : un claim mal formé arrête le run à
-cette étape, avec un message clair, au lieu de faire planter la vérification.
-
-Usage (en important la fonction depuis un autre script) :
+Usage (importing the function from another script):
     from claimverify.answering.decomposition import decompose_into_claims
-    claims = decompose_into_claims(llm, draft)   # llm : voir factory.build_llm
+    claims = decompose_into_claims(llm, draft)   # llm: see factory.build_llm
 
-Usage (en standalone, sur un brouillon sauvegardé par drafting --save_to) :
+Usage (standalone, on a draft saved by drafting --save_to):
     python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
 """
 
@@ -37,13 +34,13 @@ from claimverify.settings import add_config_argument, load_settings
 
 @runtime_checkable
 class Decomposer(Protocol):
-    """Interface : découpe un brouillon en claims atomiques."""
+    """Interface: splits a draft into atomic claims."""
 
     def decompose(self, draft: Draft) -> list[Claim]: ...
 
 
 class LLMDecomposer:
-    """Implémentation : un LLM (rôle "decompose" de llm.py) en mode JSON."""
+    """Implementation: an LLM (role "decompose" of llm.py) in JSON mode."""
 
     def __init__(self, llm: LLM):
         self.llm = llm
@@ -84,7 +81,7 @@ Respond ONLY with a valid JSON object, no text before or after, in this format:
 
 
 def decompose_into_claims(llm: LLM, draft: Draft) -> list[Claim]:
-    """Envoie la réponse brouillon au LLM et retourne la liste de claims validée."""
+    """Sends the draft to the LLM and returns the validated list of claims."""
     raw_text = llm.chat(
         [
             {"role": "system", "content": DECOMPOSITION_SYSTEM_PROMPT},
@@ -97,40 +94,40 @@ def decompose_into_claims(llm: LLM, draft: Draft) -> list[Claim]:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as e:
         raise RuntimeError(
-            f"Le modèle n'a pas retourné du JSON valide.\nRéponse brute :\n{raw_text}"
+            f"The model did not return valid JSON.\nRaw answer:\n{raw_text}"
         ) from e
 
     claims = parsed.get("claims", [])
     if not claims:
-        raise RuntimeError(f"Aucun claim extrait. Réponse brute :\n{raw_text}")
+        raise RuntimeError(f"No claim extracted. Raw answer:\n{raw_text}")
 
     try:
         return [Claim.model_validate(c) for c in claims]
     except ValidationError as e:
         raise RuntimeError(
-            f"Le modèle a renvoyé un claim mal formé :\n{e}\nRéponse brute :\n{raw_text}"
+            f"The model returned a malformed claim:\n{e}\nRaw answer:\n{raw_text}"
         ) from e
 
 
 def print_claims(claims: list[Claim]):
-    print(f"\n{len(claims)} claims extraits :\n")
+    print(f"\n{len(claims)} claims extracted:\n")
     for c in claims:
-        source = c.cited_source or "(aucune source citée)"
+        source = c.cited_source or "(no source cited)"
         print(f"  [{c.id}] {c.claim}")
         print(f"        source: {source}\n")
 
 
 def main():
-    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    # Local import: factory imports this module, importing it at the top would be circular.
     from claimverify.factory import build_decomposer
 
     parser = argparse.ArgumentParser()
     add_config_argument(parser)
     parser.add_argument("--draft_file", type=str, required=True,
-                         help="Brouillon en JSON (sortie de drafting --save_to).")
+                         help="Draft as JSON (output of drafting --save_to).")
     parser.add_argument("--save_json", type=str, default=None,
-                         help="Chemin optionnel pour sauvegarder les claims en JSON "
-                              "(à utiliser ensuite comme entrée de verification.py).")
+                         help="Optional path to save the claims as JSON "
+                              "(to use next as the input of verification.py).")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -139,14 +136,14 @@ def main():
     with open(args.draft_file, "r", encoding="utf-8") as f:
         draft = Draft.model_validate_json(f.read())
 
-    print(f"Décomposition en claims atomiques ({settings.answering.decomposer.model})...")
+    print(f"Decomposing into atomic claims ({settings.answering.decomposer.model})...")
     claims = decomposer.decompose(draft)
     print_claims(claims)
 
     if args.save_json:
         with open(args.save_json, "w", encoding="utf-8") as f:
             json.dump({"claims": [c.model_dump() for c in claims]}, f, ensure_ascii=False, indent=2)
-        print(f"Claims sauvegardés dans {args.save_json}")
+        print(f"Claims saved to {args.save_json}")
 
 
 if __name__ == "__main__":

@@ -1,1 +1,1 @@
-"""API de l'interface web (voir app.py)."""
+"""The web UI's API (see app.py)."""

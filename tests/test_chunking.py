@@ -65,7 +65,7 @@ def test_every_chunk_is_a_slice_of_the_original_text():
 def test_a_chunk_size_above_the_models_limit_is_refused():
     # 512 would become 514 with the model's own [CLS] and [SEP]: silently truncated
     chunker = FixedSizeChunker(WordTokenizer(), chunk_size=512)
-    with pytest.raises(ValueError, match="n'en lit que 510"):
+    with pytest.raises(ValueError, match="only reads 510"):
         chunker.chunk([doc(words(10))])
 
 
@@ -88,12 +88,12 @@ def chunk(embedding=None):
 
 def test_store_refuses_chunks_without_embedding_before_touching_the_database():
     # conn=None: the check must fail first, so no database is ever used
-    with pytest.raises(ValueError, match="sans embedding"):
+    with pytest.raises(ValueError, match="without an embedding"):
         replace_chunks(None, [chunk()])
 
 
 def test_store_refuses_an_empty_list_instead_of_emptying_the_table():
-    with pytest.raises(ValueError, match="Aucun chunk"):
+    with pytest.raises(ValueError, match="No chunk"):
         replace_chunks(None, [])
 
 

@@ -1,12 +1,12 @@
 """
-Stockage vectoriel pgvector — composant partagé par les deux pipelines
-========================================================================
+pgvector storage — a component shared by both pipelines
+=======================================================
 
-L'indexation écrit les chunks (setup_db, replace_chunks), la réponse les
-recherche (search_global, search_per_document). Tout le SQL est ici :
-changer de base vectorielle ne toucherait que ce module.
+Indexing writes the chunks (setup_db, replace_chunks), answering searches them
+(search_per_document, rank_all_per_document, search_global). All the SQL is
+here: switching vector databases would only touch this module.
 
-Prérequis : Postgres avec l'extension pgvector (CREATE EXTENSION IF NOT EXISTS vector;).
+Requires: Postgres with the pgvector extension (CREATE EXTENSION IF NOT EXISTS vector;).
 """
 
 from psycopg2.extras import execute_values
@@ -18,7 +18,7 @@ TOP_K_PER_DOC = 2
 
 
 # ---------------------------------------------------------------------------
-# Écriture (pipeline d'indexation)
+# Writing (indexing pipeline)
 # ---------------------------------------------------------------------------
 
 def setup_db(conn):
@@ -34,41 +34,41 @@ def setup_db(conn):
                 embedding VECTOR({EMBEDDING_DIM})
             );
         """)
-        # Pas d'index vectoriel : recherche exacte. À quelques centaines de
-        # chunks, comparer la requête à chaque ligne prend quelques ms.
-        # L'ancien index IVFFlat (créé sur une table vide, 1 seule liste
-        # parcourue) faisait disparaître des documents entiers de
-        # search_per_document, le filtre filename étant appliqué après la
-        # recherche approximative. On le supprime des bases existantes.
+        # No vector index: exact search. With a few hundred chunks, comparing
+        # the query with every row takes a few ms. The former IVFFlat index
+        # (built on an empty table, searching a single list) made whole
+        # documents disappear from search_per_document, since the filename
+        # filter applied after the approximate search. Existing databases
+        # get it dropped.
         cur.execute("DROP INDEX IF EXISTS chunks_embedding_idx;")
     conn.commit()
 
 
 def replace_chunks(conn, chunks: list[Chunk]):
-    """Remplace TOUT le contenu de la table par ces chunks : après une
-    indexation, la table contient exactement le corpus indexé. Sinon les
-    lignes d'un fichier retiré ou renommé, ou les derniers chunks d'un
-    document qui en produit moins qu'avant, resteraient cherchables."""
-    # Vérifiés avant de toucher la base. Liste vide : mauvais --corpus_dir
-    # ou dossier vide, on viderait la table pour rien.
+    """Replaces ALL the table's content with these chunks: after an
+    ingest, the table holds exactly the corpus just indexed. Otherwise the
+    rows of a removed or renamed file, or the last chunks of a document that
+    now yields fewer, would stay searchable."""
+    # Checked before touching the database. An empty list: a wrong
+    # --corpus_dir or an empty folder, which would empty the table for nothing.
     if not chunks:
-        raise ValueError("Aucun chunk à stocker : vérifier --corpus_dir. La table n'est pas modifiée.")
-    # Un chunk sans embedding vient d'une étape d'embedding sautée ou
-    # défaillante, c'est elle qu'il faut signaler.
+        raise ValueError("No chunk to store: check --corpus_dir. The table is not modified.")
+    # A chunk without an embedding comes from a skipped or failed embedding
+    # step: that is what must be reported.
     missing = [c.chunk_id for c in chunks if c.embedding is None]
     if missing:
         raise ValueError(
-            f"{len(missing)} chunk(s) sans embedding (ex. {missing[0]}) : "
-            "lancer embed_chunks avant replace_chunks."
+            f"{len(missing)} chunk(s) without an embedding (e.g. {missing[0]}): "
+            "run embed_chunks before replace_chunks."
         )
 
     rows = [
         (c.chunk_id, c.doc_id, c.filename, c.source_type, c.chunk_index, c.text, c.embedding)
         for c in chunks
     ]
-    # DELETE et INSERT dans une seule transaction (un seul commit) : en cas
-    # d'échec, Postgres annule tout et l'ancienne table reste intacte ; une
-    # recherche pendant l'indexation voit l'ancienne table complète.
+    # DELETE and INSERT in a single transaction (one commit): on failure,
+    # Postgres rolls everything back and the old table stays intact; a search
+    # during the ingest sees the complete old table.
     with conn.cursor() as cur:
         cur.execute("DELETE FROM chunks;")
         execute_values(
@@ -83,16 +83,15 @@ def replace_chunks(conn, chunks: list[Chunk]):
 
 
 # ---------------------------------------------------------------------------
-# Recherche (pipeline de réponse)
+# Searching (answering pipeline)
 # ---------------------------------------------------------------------------
 
 def search_global(conn, query_embedding, top_k: int = 5) -> list[Passage]:
-    """Recherche globale (top-k toutes sources confondues). Risque : un
-    document dominant peut monopoliser les résultats et masquer des sources
-    contradictoires pertinentes mais moins bien classées globalement. Utile
-    pour comparaison/debug (voir query_check.py --per_document), mais ne
-    doit PAS être utilisé pour la génération de réponse ni la vérification
-    de claims — voir search_per_document ci-dessous."""
+    """Global search (top-k across all sources). Risk: a dominant document can
+    take every slot and hide relevant contradicting sources that rank lower
+    overall. Useful to compare and debug (see query_check.py without
+    --per_document), but NOT to be used for drafting or claim verification:
+    see search_per_document below."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -109,11 +108,10 @@ def search_global(conn, query_embedding, top_k: int = 5) -> list[Passage]:
 
 def search_per_document(conn, query_embedding,
                         top_k_per_doc: int = TOP_K_PER_DOC) -> list[Passage]:
-    """Récupère le top-k pour CHAQUE document du corpus plutôt qu'un top-k
-    global. Garantit que chaque source a une chance d'être représentée,
-    même si un document domine systématiquement le score de similarité
-    pour une requête donnée (ex. Vectara vs LumberChunker sur les questions
-    de chunking sémantique)."""
+    """Fetches the top-k of EACH document of the corpus instead of a global
+    top-k. Guarantees that every source gets a chance to be represented, even
+    if one document always dominates the similarity score for a query (e.g.
+    Vectara vs LumberChunker on semantic chunking questions)."""
     with conn.cursor() as cur:
         cur.execute("SELECT DISTINCT filename FROM chunks;")
         filenames = [row[0] for row in cur.fetchall()]
@@ -138,10 +136,10 @@ def search_per_document(conn, query_embedding,
 
 
 def rank_all_per_document(conn, query_embedding) -> dict[str, list[Passage]]:
-    """TOUS les chunks de chaque document, du plus au moins similaire (cosinus).
-    Sert à la recherche hybride, qui fusionne ce classement avec celui de BM25 :
-    il lui faut le classement complet, pas seulement le top-k. Sans LIMIT :
-    raisonnable à cette taille de corpus (quelques centaines de chunks)."""
+    """ALL the chunks of each document, from most to least similar (cosine).
+    Used by the hybrid search, which merges this ranking with BM25's: it needs
+    the full ranking, not just the top-k. No LIMIT: reasonable at this corpus
+    size (a few hundred chunks)."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -160,14 +158,14 @@ def rank_all_per_document(conn, query_embedding) -> dict[str, list[Passage]]:
 
 
 def load_chunk_texts(conn) -> list[tuple[str, int, str]]:
-    """(filename, chunk_index, texte) de chaque chunk : de quoi construire l'index BM25."""
+    """(filename, chunk_index, text) of each chunk: what the BM25 index is built from."""
     with conn.cursor() as cur:
         cur.execute("SELECT filename, chunk_index, text FROM chunks ORDER BY filename, chunk_index;")
         return cur.fetchall()
 
 
 def _to_passage(row) -> Passage:
-    """Convertit une ligne SQL (filename, source_type, chunk_index, text, score)."""
+    """Converts an SQL row (filename, source_type, chunk_index, text, score)."""
     filename, source_type, chunk_index, text, score = row
     return Passage(filename=filename, source_type=source_type, chunk_index=chunk_index,
                    text=text, score=score)

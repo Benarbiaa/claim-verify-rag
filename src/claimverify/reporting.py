@@ -1,17 +1,16 @@
 """
-Suivi d'un run — les événements vers le terminal et vers le disque
-===================================================================
+Following a run — events to the terminal and to disk
+====================================================
 
-Un Run a un identifiant (date-heure + pipeline) et un dossier :
-    runs/<run_id>/events.jsonl   un événement complet par ligne (voir events.py)
-    runs/<run_id>/report.*       le rapport final (pipeline de réponse)
+A Run has an id (date-time + pipeline) and a folder:
+    runs/<run_id>/events.jsonl   one full event per line (see events.py)
+    runs/<run_id>/report.*       the final report (answering pipeline)
 
-Les sinks reçoivent chaque événement :
-    ConsoleSink   une ligne courte dans le terminal
-    RecorderSink  l'événement complet dans events.jsonl, écrit tout de suite :
-                  le fichier est lisible pendant le run et survit à un plantage
-Une interface (ou une base de données) sera un sink de plus, sans changer
-les orchestrateurs.
+Sinks receive every event:
+    ConsoleSink   one short line in the terminal
+    RecorderSink  the full event in events.jsonl, written at once: the file
+                  can be read during the run and survives a crash
+A UI (or a database) is one more sink, with no change to the orchestrators.
 """
 
 from collections import Counter
@@ -29,13 +28,13 @@ RUNS_DIR = Path("runs")
 
 @runtime_checkable
 class EventSink(Protocol):
-    """Interface : reçoit les événements d'un run."""
+    """Interface: receives the events of a run."""
 
     def handle(self, event: Event) -> None: ...
 
 
 class ConsoleSink:
-    """Une ligne courte par événement. Le détail complet est dans events.jsonl."""
+    """One short line per event. The full detail is in events.jsonl."""
 
     def handle(self, event: Event) -> None:
         line = self.describe(event)
@@ -90,7 +89,7 @@ class ConsoleSink:
 
 
 def _usage_note(event: Event) -> str:
-    """", 4.5K tokens, 1 retry (waited 21s)" pour une étape qui a appelé un LLM, sinon ""."""
+    """", 4.5K tokens, 1 retry (waited 21s)" for a stage that called an LLM, else ""."""
     usage = getattr(event, "usage", None)
     if not usage or not usage.calls:
         return ""
@@ -102,7 +101,7 @@ def _usage_note(event: Event) -> str:
 
 
 class RecorderSink:
-    """Ajoute chaque événement complet, en JSON, à un fichier (une ligne par événement)."""
+    """Appends each full event, as JSON, to a file (one line per event)."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -113,7 +112,7 @@ class RecorderSink:
 
 
 class Run:
-    """Un run : son identifiant, son dossier, et les sinks qui reçoivent ses événements."""
+    """A run: its id, its folder, and the sinks that receive its events."""
 
     def __init__(self, pipeline: Pipeline, sinks: list[EventSink] | None = None,
                  runs_dir: Path = RUNS_DIR):
@@ -135,6 +134,6 @@ _EVENT = TypeAdapter(AnyEvent)
 
 
 def load_events(path: Path) -> list[Event]:
-    """Relit un events.jsonl en objets identiques à ceux émis (pour l'interface, le rejeu)."""
+    """Reads an events.jsonl back into objects identical to those emitted (for the UI, replay)."""
     with open(path, encoding="utf-8") as f:
         return [_EVENT.validate_json(line) for line in f if line.strip()]

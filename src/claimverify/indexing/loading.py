@@ -1,6 +1,6 @@
 """
-Chargement du corpus — PDF et Markdown vers Document
-======================================================
+Loading the corpus — PDF and Markdown to Document
+=================================================
 """
 
 import hashlib
@@ -11,21 +11,21 @@ from pypdf import PdfReader
 
 from claimverify.contracts import Document
 
-# Entre deux pages : un saut de page, pas une ligne vide (qui ressemblerait à
-# une fin de paragraphe au milieu d'une phrase). Le nettoyage (cleaning.py)
-# s'en sert pour repérer les numéros de page, puis le retire.
+# Between two pages: a form feed, not a blank line (which would look like the end
+# of a paragraph in the middle of a sentence). The cleaner (cleaning.py) uses it
+# to find page numbers, then removes it.
 PAGE_BREAK = "\f"
 
 
 @runtime_checkable
 class Loader(Protocol):
-    """Interface : lit un corpus et le convertit en Documents."""
+    """Interface: reads a corpus and turns it into Documents."""
 
     def load(self, corpus_dir: Path) -> list[Document]: ...
 
 
 class FileLoader:
-    """Implémentation : fichiers PDF et Markdown d'un dossier."""
+    """Implementation: the PDF and Markdown files of a folder."""
 
     def load(self, corpus_dir: Path) -> list[Document]:
         return load_corpus(corpus_dir)
@@ -42,7 +42,7 @@ def parse_markdown(path: Path) -> str:
 
 
 def load_corpus(corpus_dir: Path) -> list[Document]:
-    """Lit chaque fichier PDF ou Markdown du dossier et le convertit en Document."""
+    """Reads each PDF or Markdown file of the folder and turns it into a Document."""
     documents = []
     for path in sorted(corpus_dir.iterdir()):
         if path.suffix.lower() == ".pdf":
@@ -50,7 +50,7 @@ def load_corpus(corpus_dir: Path) -> list[Document]:
             source_type = "peer_reviewed_paper"
         elif path.suffix.lower() == ".md":
             text = parse_markdown(path)
-            source_type = "blog_post"  # à ajuster si le .md n'est pas un article de blog
+            source_type = "blog_post"  # to adjust if a .md file is not a blog post
         else:
             continue
 

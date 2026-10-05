@@ -58,5 +58,5 @@ def test_only_the_candidates_are_reread():
 
 
 def test_rerank_without_a_reranker_is_an_error():
-    with pytest.raises(ValueError, match="demande un reranker"):
+    with pytest.raises(ValueError, match="needs a reranker"):
         index().ranking("beta", "b.pdf", "rerank")

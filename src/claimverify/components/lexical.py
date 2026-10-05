@@ -1,16 +1,16 @@
 """
-Recherche lexicale — BM25 et fusion de classements
-===================================================
+Lexical search — BM25 and rank fusion
+=====================================
 
-L'embedding capte le SUJET d'un passage, pas le détail exact : dans un
-article où tous les chunks parlent de "RAG", un chiffre ("400M", "7.37") ou
-un nom ("FAISS") pèse à peine dans le vecteur. BM25 fait l'inverse : il ne
-comprend pas le sens, il compte les mots, et un mot RARE dans le corpus pèse
-beaucoup. Les deux se complètent ; reciprocal_rank_fusion fusionne leurs
-classements.
+An embedding captures the TOPIC of a passage, not the exact detail: in a
+paper where every chunk talks about "RAG", a figure ("400M", "7.37") or a name
+("FAISS") barely weighs in the vector. BM25 does the opposite: it does not
+understand meaning, it counts words, and a word that is RARE in the corpus
+weighs a lot. The two complement each other; reciprocal_rank_fusion merges
+their rankings.
 
-Composant partagé : utilisé par la mesure du retrieval (retrieval_eval.py),
-et par le pipeline si la mesure montre un gain.
+Shared component: used by the retrieval measurement (retrieval_eval.py) and
+by the pipeline's hybrid search (answering/retrieval.py).
 """
 
 import math
@@ -18,12 +18,12 @@ import re
 import unicodedata
 from collections import Counter
 
-# Mots, nombres et codes gardés entiers : "7.37", "400m", "bart-large", "f1@5".
+# Words, numbers and codes kept whole: "7.37", "400m", "bart-large", "f1@5".
 _TOKEN = re.compile(r"\w+(?:[.\-@/]\w+)*")
 
-K1 = 1.5   # saturation : la 10e occurrence d'un mot rapporte moins que la 2e
-B = 0.75   # normalisation par la longueur : un long texte ne gagne pas juste parce qu'il est long
-RRF_K = 60  # constante de la fusion par rangs (valeur de l'article d'origine, non réglée)
+K1 = 1.5   # saturation: the 10th occurrence of a word adds less than the 2nd
+B = 0.75   # length normalization: a long text does not win just for being long
+RRF_K = 60  # rank fusion constant (the original paper's value, not tuned)
 
 
 def tokenize(text: str) -> list[str]:
@@ -32,22 +32,22 @@ def tokenize(text: str) -> list[str]:
 
 
 class Bm25Index:
-    """BM25 (Robertson) sur une liste de textes, avec l'IDF toujours positif de
-    Lucene. Les poids des mots sont calculés sur TOUS les textes donnés."""
+    """BM25 (Robertson) over a list of texts, with Lucene's always-positive IDF.
+    Word weights are computed over ALL the texts given."""
 
     def __init__(self, texts: list[str], k1: float = K1, b: float = B):
         self.k1, self.b = k1, b
         self.counts = [Counter(tokenize(t)) for t in texts]
         self.lengths = [sum(c.values()) for c in self.counts]
         self.avg_length = sum(self.lengths) / len(self.lengths) if texts else 0.0
-        # Rareté d'un mot : présent dans peu de textes -> poids fort.
+        # Rarity of a word: present in few texts -> high weight.
         n = len(texts)
         df = Counter(word for c in self.counts for word in c)
         self.idf = {word: math.log(1 + (n - d + 0.5) / (d + 0.5)) for word, d in df.items()}
 
     def scores(self, query: str) -> list[float]:
-        """Un score par texte, dans l'ordre des textes donnés au constructeur."""
-        words = set(tokenize(query))  # un mot répété dans la requête ne compte qu'une fois
+        """One score per text, in the order of the texts given to the constructor."""
+        words = set(tokenize(query))  # a word repeated in the query counts once
         result = []
         for counts, length in zip(self.counts, self.lengths, strict=True):
             norm = self.k1 * (1 - self.b + self.b * length / self.avg_length) if self.avg_length else self.k1
@@ -59,11 +59,10 @@ class Bm25Index:
 
 
 def reciprocal_rank_fusion(rankings: list[list[int]], k: int = RRF_K) -> list[int]:
-    """Fusionne plusieurs classements des mêmes éléments (du meilleur au moins
-    bon) : score = somme de 1 / (k + rang). On fusionne des RANGS, pas des
-    scores : un cosinus (0 à 1) et un score BM25 (sans borne) ne sont pas
-    comparables, et aucun poids n'est à régler. À égalité, l'ordre du premier
-    classement est gardé."""
+    """Merges several rankings of the same items (best first): score = sum of
+    1 / (k + rank). RANKS are merged, not scores: a cosine (0 to 1) and a BM25
+    score (unbounded) are not comparable, and no weight needs tuning. On a
+    tie, the order of the first ranking is kept."""
     fused: dict[int, float] = {}
     for ranking in rankings:
         for rank, item in enumerate(ranking, start=1):

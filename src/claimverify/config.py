@@ -1,13 +1,13 @@
 """
-Configuration partagée — chargement du .env et URL de la base
-=============================================================
+Shared configuration — loading .env and the database URL
+========================================================
 
-Le .env est chargé ici, une seule fois, pour tous les scripts du package.
-load_dotenv n'écrase pas les variables déjà définies : une variable exportée
-dans le shell reste prioritaire sur le .env.
+.env is loaded here, once, for every script of the package. load_dotenv does
+not overwrite variables that are already set: a variable exported in the
+shell takes precedence over .env.
 
-Résolution de l'URL de la base, du plus spécifique au plus général :
-    --db_url  ->  DB_URL (shell ou .env)
+Database URL, from the most specific to the most general:
+    --db_url  ->  DB_URL (shell or .env)
 """
 
 import argparse
@@ -19,10 +19,10 @@ load_dotenv()
 
 
 def add_db_url_argument(parser: argparse.ArgumentParser) -> None:
-    """Ajoute --db_url, facultatif si DB_URL est défini (shell ou .env)."""
+    """Adds --db_url, optional when DB_URL is set (shell or .env)."""
     default = os.getenv("DB_URL")
     parser.add_argument(
         "--db_url", type=str, default=default, required=default is None,
-        help="URL PostgreSQL, ex. postgresql://rag_user:admin@localhost:5432/ragdb "
-             "(défaut : DB_URL dans .env)",
+        help="PostgreSQL URL, e.g. postgresql://rag_user:admin@localhost:5432/ragdb "
+             "(default: DB_URL in .env)",
     )

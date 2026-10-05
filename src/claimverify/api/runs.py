@@ -1,15 +1,15 @@
 """
-Lecture des dossiers de runs — ce que l'interface affiche
-===========================================================
+Reading run folders — what the UI shows
+=======================================
 
-Un run est un dossier runs/<run_id>/ (voir reporting.py) : events.jsonl, et
-pour le pipeline de réponse report.json. Ce module ne fait que les relire :
-aucune logique du pipeline ici, seulement des résumés (verdicts, tokens,
-durées) calculés à partir des événements enregistrés.
+A run is a folder runs/<run_id>/ (see reporting.py): events.jsonl, plus
+report.json for the answering pipeline. This module only reads them back: no
+pipeline logic here, only summaries (verdicts, tokens, durations) computed
+from the recorded events.
 
-Plusieurs racines sont possibles, chacune avec sa "source" : "recorded" pour
-les vrais runs (runs/), "fixture" pour les runs de test construits par
-tests/fixtures/ (affichés comme tels dans l'interface).
+Several roots are possible, each with its "source": "recorded" for real runs
+(runs/), "fixture" for the test runs built by tests/fixtures/ (shown as such
+in the UI).
 """
 
 import json
@@ -28,14 +28,14 @@ STAGE_TYPES = ("passages_retrieved", "draft_written", "claims_extracted", "claim
 class RunFolder:
     run_id: str
     path: Path
-    source: str  # "recorded" ou "fixture"
+    source: str  # "recorded" or "fixture"
 
 
 class RunStore:
-    """Les runs de une ou plusieurs racines ; relus seulement quand le fichier change."""
+    """The runs of one or more roots; read again only when the file changes."""
 
     def __init__(self, roots: dict[str, Path]):
-        self.roots = roots  # source -> dossier
+        self.roots = roots  # source -> folder
         self._cache: dict[Path, tuple[tuple[float, int], list[Event]]] = {}
 
     def folders(self) -> list[RunFolder]:
@@ -63,7 +63,7 @@ class RunStore:
     def summary(self, folder: RunFolder) -> dict:
         try:
             return summarize(folder, self.events(folder))
-        except (ValueError, OSError) as e:  # ligne illisible, fichier disparu...
+        except (ValueError, OSError) as e:  # unreadable line, file gone...
             return {"run_id": folder.run_id, "source": folder.source,
                     "pipeline": folder.run_id.rsplit("_", 1)[1], "status": "unreadable",
                     "error": str(e).splitlines()[0]}
@@ -83,7 +83,7 @@ class RunStore:
 
 
 def summarize(folder: RunFolder, events: list[Event]) -> dict:
-    """Le résumé d'un run pour la liste : type, questions, verdicts, durée, tokens."""
+    """A run's summary for the list: type, questions, verdicts, duration, tokens."""
     first = events[0] if events else None
     finished = next((e for e in events if e.type == "run_finished"), None)
     started = first.type == "run_started" if first else False

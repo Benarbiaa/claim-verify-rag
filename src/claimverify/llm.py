@@ -1,23 +1,22 @@
 """
-Client LLM — un modèle prêt à l'emploi, derrière une API compatible OpenAI
-============================================================================
+LLM client — a ready-to-use model, behind an OpenAI-compatible API
+==================================================================
 
-Tous les fournisseurs visés exposent une API compatible OpenAI (Groq, Gemini,
-Cerebras, Mistral, OpenRouter, Ollama/vLLM en local...) : un LLM, c'est donc
-un nom de modèle + l'URL du fournisseur + une clé.
+Every targeted provider exposes an OpenAI-compatible API (Groq, Gemini,
+Cerebras, Mistral, OpenRouter, Ollama/vLLM locally...): an LLM is therefore a
+model name + the provider's URL + a key.
 
-QUEL modèle et QUEL fournisseur chaque étape utilise se choisit dans
-config.yaml ; la clé API se met dans .env. C'est factory.build_llm qui
-assemble les trois et appelle make_llm.
+WHICH model and WHICH provider each stage uses is chosen in config.yaml; the
+API key goes in .env. factory.build_llm puts the three together and calls
+make_llm.
 
-Nouvelles tentatives : faites ici (celles du SDK sont désactivées), pour les
-voir et les compter, et pour traiter à part les erreurs qu'il est inutile de
-retenter :
-    429 limite par minute, 5xx, délai, réseau  -> attendre puis réessayer
-    429 dont l'attente dépasse max_wait_seconds (ex. limite par jour) -> LLMCallError
-    413 requête plus grosse que la limite par minute -> LLMCallError (jamais retentée)
-    autres 4xx (ex. 400 JSON rejeté)           -> remontées telles quelles
-Chaque appel est enregistré dans un UsageMeter (tokens, tentatives, attente).
+Retries: done here (the SDK's are disabled), to see and count them, and to
+handle separately the errors that are pointless to retry:
+    429 per-minute limit, 5xx, timeout, network -> wait, then retry
+    429 whose wait exceeds max_wait_seconds (e.g. daily limit) -> LLMCallError
+    413 request larger than the per-minute limit -> LLMCallError (never retried)
+    other 4xx (e.g. 400 JSON rejected)          -> raised unchanged
+Every call is recorded in a UsageMeter (tokens, attempts, waiting).
 """
 
 import re
@@ -33,14 +32,14 @@ from claimverify.events import Usage
 
 
 class LLMCallError(RuntimeError):
-    """Un appel qu'il est inutile (ou impossible) de retenter : le run s'arrête."""
+    """A call that is pointless (or impossible) to retry: the run stops."""
 
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    max_retries: int = 6          # nouvelles tentatives après le premier échec
-    max_wait_seconds: float = 60  # une attente plus longue arrête le run
-    timeout_seconds: float = 120  # durée maximale d'une requête
+    max_retries: int = 6          # new attempts after the first failure
+    max_wait_seconds: float = 60  # a longer wait stops the run
+    timeout_seconds: float = 120  # maximum duration of one request
 
 
 @dataclass(frozen=True)
@@ -55,19 +54,19 @@ class CallRecord:
 
 @dataclass(frozen=True)
 class WaitNotice:
-    """Une attente sur le point de commencer, avant une nouvelle tentative."""
+    """A wait about to start, before a new attempt."""
     role: str
     model: str
     seconds: float
-    attempt: int   # la tentative qui vient d'échouer (1 = le premier appel)
-    reason: str    # "rate_limit", "server_error" ou "connection"
+    attempt: int   # the attempt that just failed (1 = the first call)
+    reason: str    # "rate_limit", "server_error" or "connection"
 
 
 class UsageMeter:
-    """Enregistre chaque appel ; partagé par tous les LLM d'un pipeline (voir factory).
+    """Records every call; shared by all the LLMs of a pipeline (see factory).
 
-    on_wait, si défini, est prévenu avant chaque attente : une attente de 30 s
-    due à une limite par minute se voit pendant l'étape, pas seulement après.
+    on_wait, when set, is told before each wait: a 30 s wait caused by a
+    per-minute limit shows during the stage, not only afterwards.
     """
 
     def __init__(self):
@@ -79,7 +78,7 @@ class UsageMeter:
         self.records.append(call)
 
     def take(self) -> Usage:
-        """Usage depuis le dernier take() : l'orchestrateur l'appelle après chaque étape."""
+        """Usage since the last take(): the orchestrator calls it after each stage."""
         new, self._cursor = self.records[self._cursor:], len(self.records)
         return _sum(new)
 
@@ -100,7 +99,7 @@ def _sum(records: list[CallRecord]) -> Usage:
 
 
 def _retry_after(error: openai.APIStatusError) -> float | None:
-    """Attente demandée par le fournisseur : en-tête retry-after, sinon "try again in 9m14.6s"."""
+    """The wait the provider asks for: the retry-after header, else "try again in 9m14.6s"."""
     header = error.response.headers.get("retry-after")
     if header:
         try:
@@ -115,22 +114,21 @@ def _retry_after(error: openai.APIStatusError) -> float | None:
 
 @cache
 def _client(base_url: str, api_key: str, timeout: float) -> OpenAI:
-    # Un client par (fournisseur, clé) : si deux rôles partagent le même
-    # fournisseur, ils partagent le même client. max_retries=0 : c'est LLM.chat
-    # qui gère les nouvelles tentatives.
+    # One client per (provider, key): two roles sharing a provider share a
+    # client. max_retries=0: LLM.chat handles the retries.
     return OpenAI(api_key=api_key, base_url=base_url, max_retries=0, timeout=timeout)
 
 
 @dataclass(frozen=True)
 class LLM:
-    """Un modèle prêt à l'emploi pour un rôle donné."""
+    """A ready-to-use model for a given role."""
     role: str
     model: str
     base_url: str
     client: OpenAI
     retry: RetryPolicy = RetryPolicy()
     meter: UsageMeter = field(default_factory=UsageMeter)
-    sleep: Callable[[float], None] = time.sleep  # remplaçable dans les tests
+    sleep: Callable[[float], None] = time.sleep  # replaceable in tests
 
     def chat(self, messages: list[dict], json_mode: bool = False) -> str:
         kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
@@ -145,26 +143,26 @@ class LLM:
             except openai.APIStatusError as e:
                 if e.status_code == 413:
                     raise LLMCallError(
-                        f"{self.role} ({self.model}) : requête plus grosse que la limite du "
-                        f"fournisseur par minute. Réduire top_k_per_doc dans la config."
+                        f"{self.role} ({self.model}): request larger than the provider's "
+                        f"per-minute limit. Lower top_k_per_doc in the config."
                     ) from e
                 if e.status_code != 429 and e.status_code < 500:
-                    raise  # ex. 400 : pas une erreur temporaire
+                    raise  # e.g. 400: not a temporary error
                 wait = _retry_after(e)
                 error, reason = e, "rate_limit" if e.status_code == 429 else "server_error"
-            except openai.APIConnectionError as e:  # inclut les délais dépassés
+            except openai.APIConnectionError as e:  # includes timeouts
                 wait, error, reason = None, e, "connection"
             if wait is None:
                 wait = min(2 ** (attempts - 1), self.retry.max_wait_seconds)
             if attempts > self.retry.max_retries:
                 raise LLMCallError(
-                    f"{self.role} ({self.model}) : échec après {attempts} tentatives ({error})"
+                    f"{self.role} ({self.model}): failed after {attempts} attempts ({error})"
                 ) from error
             if wait > self.retry.max_wait_seconds:
                 raise LLMCallError(
-                    f"{self.role} ({self.model}) : le fournisseur demande d'attendre {wait:.0f}s "
-                    f"(> max_wait_seconds={self.retry.max_wait_seconds:.0f}), probablement une "
-                    f"limite par jour. Réessayer plus tard ou changer de fournisseur."
+                    f"{self.role} ({self.model}): the provider asks to wait {wait:.0f}s "
+                    f"(> max_wait_seconds={self.retry.max_wait_seconds:.0f}), probably a "
+                    f"daily limit. Try again later or switch provider."
                 ) from error
             if self.meter.on_wait:
                 self.meter.on_wait(WaitNotice(self.role, self.model, wait, attempts, reason))
@@ -188,7 +186,7 @@ class LLM:
 
 def make_llm(role: str, model: str, base_url: str, api_key: str,
              retry: RetryPolicy | None = None, meter: UsageMeter | None = None) -> LLM:
-    """Construit un LLM à partir de valeurs déjà résolues (utilisé par la factory)."""
+    """Builds an LLM from already-resolved values (used by the factory)."""
     retry = retry or RetryPolicy()
     return LLM(role=role, model=model, base_url=base_url,
                client=_client(base_url, api_key, retry.timeout_seconds),

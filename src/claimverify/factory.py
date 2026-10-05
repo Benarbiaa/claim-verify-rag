@@ -1,13 +1,13 @@
 """
-Factory — construit les étapes du pipeline à partir de config.yaml
-====================================================================
+Factory — builds the pipeline's stages from config.yaml
+=======================================================
 
-Chaque registre associe un "type" de config.yaml à la classe qui l'implémente.
-Ajouter une implémentation = écrire la classe, puis ajouter une ligne ici.
-Le reste du code (orchestrateurs) ne manipule que les interfaces.
+Each registry maps a "type" of config.yaml to the class that implements it.
+Adding an implementation = writing the class, then adding one line here.
+The rest of the code (the orchestrators) only handles interfaces.
 
-Rien n'est coûteux à la construction : aucun appel API, et le modèle
-d'embedding n'est chargé qu'au premier usage (BgeEmbedder).
+Nothing is costly at build time: no API call, and the models (embedder,
+reranker) are only loaded on first use.
 """
 
 import os
@@ -26,7 +26,7 @@ from claimverify.llm import LLM, RetryPolicy, UsageMeter, make_llm
 from claimverify.settings import LLMStageSettings, RetrieverSettings, Settings
 
 # ---------------------------------------------------------------------------
-# Registres : type (dans config.yaml) -> constructeur
+# Registries: type (in config.yaml) -> constructor
 # ---------------------------------------------------------------------------
 
 LOADERS = {
@@ -62,12 +62,12 @@ VERIFIERS = {
 
 def _pick(registry: dict, type_: str, stage: str):
     if type_ not in registry:
-        raise ValueError(f"{stage} : type inconnu '{type_}' (disponibles : {sorted(registry)})")
+        raise ValueError(f"{stage}: unknown type '{type_}' (available: {sorted(registry)})")
     return registry[type_]
 
 
 # ---------------------------------------------------------------------------
-# Constructeurs par étape
+# One builder per stage
 # ---------------------------------------------------------------------------
 
 def build_llm(settings: Settings, stage: LLMStageSettings, role: str,
@@ -76,8 +76,8 @@ def build_llm(settings: Settings, stage: LLMStageSettings, role: str,
     api_key = os.getenv(provider.api_key_env)
     if not api_key:
         raise RuntimeError(
-            f"Clé API manquante : {provider.api_key_env} (fournisseur '{stage.provider}', "
-            f"utilisé par {role}). La définir dans .env."
+            f"Missing API key: {provider.api_key_env} (provider '{stage.provider}', "
+            f"used by {role}). Set it in .env."
         )
     retry = RetryPolicy(provider.max_retries, provider.max_wait_seconds, provider.timeout_seconds)
     return make_llm(role, stage.model, provider.base_url, api_key, retry, meter)
@@ -105,7 +105,7 @@ def build_chunker(settings: Settings, tokenizer: Tokenizer) -> Chunker:
 def build_retriever(cfg: RetrieverSettings, embedder: Embedder, conn, stage: str) -> Retriever:
     if cfg.rerank is None:
         return _pick(RETRIEVERS, cfg.type, stage)(cfg, embedder, conn)
-    # La recherche ramène `candidates` passages par document ; le reranker en garde top_k_per_doc.
+    # The search brings `candidates` passages per document; the reranker keeps top_k_per_doc.
     base = _pick(RETRIEVERS, cfg.type, stage)(
         cfg.model_copy(update={"top_k_per_doc": cfg.rerank.candidates}), embedder, conn)
     return RerankingRetriever(base, _reranker(cfg.rerank.model, cfg.rerank.device), cfg.top_k_per_doc)
@@ -113,8 +113,8 @@ def build_retriever(cfg: RetrieverSettings, embedder: Embedder, conn, stage: str
 
 @cache
 def _reranker(model: str, device: str):
-    # Un seul modèle chargé par processus, partagé par les retrievers du drafter et du juge
-    # (et par les runs successifs de l'interface). Chargé au premier usage seulement.
+    # One model loaded per process, shared by the drafter's and the judge's retrievers
+    # (and by the UI's successive runs). Loaded on first use only.
     from claimverify.components.reranking import CrossEncoderReranker
     return CrossEncoderReranker(model, device)
 
@@ -145,7 +145,7 @@ def build_verifier(settings: Settings, embedder: Embedder, conn,
 
 
 # ---------------------------------------------------------------------------
-# Assemblage des deux pipelines
+# Assembling the two pipelines
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -162,18 +162,18 @@ class AnsweringStages:
     drafter: Drafter
     decomposer: Decomposer
     verifier: Verifier
-    # Partagé par tous les LLM du pipeline : l'orchestrateur y lit l'usage de
-    # chaque étape sans savoir quelles étapes utilisent un LLM.
+    # Shared by every LLM of the pipeline: the orchestrator reads each stage's
+    # usage from it without knowing which stages use an LLM.
     meter: UsageMeter = field(default_factory=UsageMeter)
 
 
 def build_indexing(settings: Settings, embedder: Embedder | None = None) -> IndexingStages:
-    # Le chunker mesure avec l'embedder lui-même : les chunks sont comptés en
-    # tokens du modèle qui va les lire, sans réglage à garder synchronisé.
+    # The chunker measures with the embedder itself: chunks are counted in the
+    # tokens of the model that will read them, with no setting to keep in sync.
     embedder = embedder or build_embedder(settings)
     if not isinstance(embedder, Tokenizer):
-        raise TypeError(f"{type(embedder).__name__} ne fournit pas token_spans : "
-                        "le chunker ne peut pas compter ses tokens.")
+        raise TypeError(f"{type(embedder).__name__} does not provide token_spans: "
+                        "the chunker cannot count its tokens.")
     return IndexingStages(
         loader=build_loader(settings),
         cleaner=build_cleaner(settings),
@@ -183,8 +183,8 @@ def build_indexing(settings: Settings, embedder: Embedder | None = None) -> Inde
 
 
 def build_answering(settings: Settings, conn, embedder: Embedder | None = None) -> AnsweringStages:
-    # Un seul embedder pour tous les retrievers : les questions et les claims
-    # doivent être embeddés comme les chunks l'ont été.
+    # One embedder for every retriever: questions and claims must be embedded
+    # the way the chunks were.
     embedder = embedder or build_embedder(settings)
     meter = UsageMeter()
     return AnsweringStages(

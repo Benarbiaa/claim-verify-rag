@@ -31,7 +31,7 @@ def test_decompose_rejects_empty_claims():
 
 def test_decompose_rejects_a_malformed_claim_at_the_boundary():
     # e.g. a model that writes "text" instead of "claim": caught here, not inside verification
-    with pytest.raises(RuntimeError, match="mal formé"):
+    with pytest.raises(RuntimeError, match="malformed"):
         decompose_into_claims(fake_llm('{"claims": [{"id": "c1", "text": "X"}]}'), DRAFT)
 
 
@@ -81,7 +81,7 @@ def test_provider_json_rejection_becomes_error_instead_of_crashing():
     llm = failing_llm(provider_error("json_validate_failed"))
     entry = judge_with_llm(llm, CLAIM, PASSAGES)
     assert entry.verdict == "error"
-    assert "rejeté par le fournisseur" in entry.justification
+    assert "rejected by the provider" in entry.justification
 
 
 def test_other_provider_errors_are_not_hidden():

@@ -1,24 +1,24 @@
 """
-Vérification de claims — Étape D (le coeur du projet)
-=========================================================
+Claim verification — Step D (the heart of the project)
+======================================================
 
-Pour chaque claim atomique (sortie de l'étape C) :
-    1. Retrieval CIBLÉ ET PAR DOCUMENT (pas de réutilisation du cited_source
-       du claim — on ignore délibérément d'où le claim brouillon prétendait
-       venir, et on recherche indépendamment dans TOUT le corpus).
-    2. Un juge — par défaut un LLM d'une AUTRE famille que celui qui a rédigé
-       la réponse (answering.verifier.judge dans config.yaml) — rend un verdict :
-       supporté / contredit / non vérifiable, avec justification et sources.
+For each atomic claim (the output of step C):
+    1. TARGETED, PER-DOCUMENT retrieval (the claim's cited_source is not
+       reused: where the draft claimed it came from is deliberately ignored,
+       and the WHOLE corpus is searched independently).
+    2. A judge (by default an LLM from ANOTHER family than the one that wrote
+       the draft: answering.verifier.judge in config.yaml) gives a verdict,
+       with a justification and its sources.
 
-Le Verifier reçoit son Retriever et son Judge (voir la section Interfaces) ;
-l'implémentation actuelle boucle avec LangGraph : retrieve -> judge -> claim
-suivant, jusqu'à épuisement.
+The Verifier receives its Retriever and its Judge (see the Interfaces
+section); the current implementation loops with LangGraph: retrieve -> judge
+-> next claim, until there are none left.
 
-Usage :
-    # 1) Décomposer une réponse en claims (étape C) et sauvegarder en JSON :
+Usage:
+    # 1) Split an answer into claims (step C) and save them as JSON:
     python -m claimverify.answering.decomposition --draft_file draft.json --save_json claims.json
 
-    # 2) Vérifier ces claims (--db_url facultatif si DB_URL est dans .env, voir config.py) :
+    # 2) Verify these claims (--db_url is optional when DB_URL is in .env, see config.py):
     python -m claimverify.answering.verification --claims_file claims.json
 """
 
@@ -72,35 +72,34 @@ Respond ONLY with a valid JSON object, no text before or after, in this format:
 
 
 def debug_single_claim(claim_text: str, retriever: Retriever):
-    """Affiche en détail (texte complet + scores) les chunks récupérés pour
-    UN SEUL claim, sans appel LLM. Sert à diagnostiquer si un verdict
-    "unverifiable" vient d'un problème de retrieval (le bon chunk n'a pas
-    été récupéré) ou d'un problème de jugement LLM (le chunk était là mais
-    mal évalué)."""
+    """Prints in detail (full text + scores) the chunks retrieved for ONE
+    claim, with no LLM call. Used to diagnose whether an "unverifiable"
+    verdict comes from retrieval (the right chunk was not retrieved) or from
+    the LLM's judgment (the chunk was there but misjudged)."""
     passages = retriever.retrieve(claim_text)
 
     print("=" * 100)
-    print(f"CLAIM : {claim_text}")
+    print(f"CLAIM: {claim_text}")
     print("=" * 100)
     for p in passages:
         print(f"\n[score={p.score:.4f}] {p.filename} (#{p.chunk_index}, {p.source_type})")
         print(f"{'-' * 80}")
         print(p.text)
     print("\n" + "=" * 100)
-    print(f"Total : {len(passages)} chunks depuis {len({p.filename for p in passages})} document(s)")
+    print(f"Total: {len(passages)} chunks from {len({p.filename for p in passages})} document(s)")
 
 
 # ---------------------------------------------------------------------------
-# Jugement d'un claim par un LLM
+# Judging a claim with an LLM
 # ---------------------------------------------------------------------------
 
 def judge_with_llm(llm: LLM, claim: Claim, passages: list[Passage]) -> Verdict:
-    """Demande un verdict au LLM pour un claim, au vu des passages.
+    """Asks the LLM for a verdict on a claim, given the passages.
 
-    Une réponse inexploitable donne le verdict "error" (jamais "unverifiable",
-    qui est une conclusion sur les sources) : JSON invalide ou tronqué, verdict
-    inconnu, champ manquant, sources incohérentes avec le verdict, ou JSON
-    rejeté par le fournisseur lui-même. La réponse brute est gardée.
+    An unusable answer gives the verdict "error" (never "unverifiable", which
+    is a conclusion about the sources): invalid or truncated JSON, unknown
+    verdict, missing field, sources inconsistent with the verdict, or JSON
+    rejected by the provider itself. The raw answer is kept.
     """
     user_message = f"""Claim to verify:
 "{claim.claim}"
@@ -128,39 +127,39 @@ cited by the claim):
         ) or ""
         data = json.loads(raw_text)
         if not isinstance(data, dict) or data.get("verdict") not in JUDGE_LABELS:
-            raise ValueError(f"verdict absent ou hors des {len(JUDGE_LABELS)} verdicts du juge")
+            raise ValueError(f"verdict missing or not one of the judge's {len(JUDGE_LABELS)} verdicts")
         return Verdict(**identity, **data)
     except BadRequestError as e:
-        # En mode JSON, Groq peut rejeter lui-même une réponse qui n'est pas du
-        # JSON valide (souvent tronquée). Les autres erreurs 400 restent des erreurs.
+        # In JSON mode, Groq can itself reject an answer that is not valid JSON
+        # (often truncated). Other 400 errors remain errors.
         if "json_validate_failed" not in str(e):
             raise
-        reason, raw_text = "JSON rejeté par le fournisseur", str(e)
-    except (json.JSONDecodeError, TypeError, ValueError) as e:  # ValidationError en hérite
+        reason, raw_text = "JSON rejected by the provider", str(e)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:  # ValidationError inherits from it
         reason = f"{type(e).__name__}: {str(e).splitlines()[0]}"
     return Verdict(
         **identity,
         verdict="error",
-        justification=f"Réponse du juge inexploitable ({reason}). Réponse brute : {raw_text[:300]}",
+        justification=f"Unusable judge answer ({reason}). Raw answer: {raw_text[:300]}",
     )
 
 
 # ---------------------------------------------------------------------------
-# Interfaces Judge et Verifier, et leurs implémentations
+# The Judge and Verifier interfaces, and their implementations
 # ---------------------------------------------------------------------------
-# Le Verifier fait "pour chaque claim : chercher des passages, puis juger".
-# Il REÇOIT un Retriever et un Judge : on peut remplacer l'un, l'autre, ou
-# tout le Verifier. L'état du graphe ne contient que des données.
+# The Verifier does "for each claim: find passages, then judge". It RECEIVES a
+# Retriever and a Judge: either one, or the whole Verifier, can be replaced.
+# The graph's state holds only data.
 
 @runtime_checkable
 class Judge(Protocol):
-    """Interface : rend un verdict sur un claim, au vu de passages."""
+    """Interface: gives a verdict on a claim, given passages."""
 
     def judge(self, claim: Claim, passages: list[Passage]) -> Verdict: ...
 
 
 class LLMJudge:
-    """Implémentation : un LLM (rôle "verify" de llm.py) avec VERDICT_SYSTEM_PROMPT."""
+    """Implementation: an LLM (role "verify" of llm.py) with VERDICT_SYSTEM_PROMPT."""
 
     def __init__(self, llm: LLM):
         self.llm = llm
@@ -171,17 +170,17 @@ class LLMJudge:
 
 @runtime_checkable
 class Verifier(Protocol):
-    """Interface : rend un verdict pour chaque claim."""
+    """Interface: gives a verdict for each claim."""
 
     def verify(self, claims: list[Claim]) -> Iterator[Verdict]:
-        """Rend les verdicts un par un, dès que chacun est prêt (même ordre que les claims)."""
+        """Yields the verdicts one by one, as soon as each is ready (same order as the claims)."""
         ...
 
 
 class VerifierState(TypedDict):
     claims: list[Claim]
     current_index: int
-    passages: list[Passage]      # passages du claim en cours
+    passages: list[Passage]      # passages of the current claim
     verdicts: list[Verdict]
 
 
@@ -190,7 +189,7 @@ def should_continue(state: VerifierState) -> str:
 
 
 class LangGraphVerifier:
-    """Implémentation : boucle LangGraph retrieve -> judge sur chaque claim."""
+    """Implementation: a LangGraph loop retrieve -> judge over the claims."""
 
     def __init__(self, retriever: Retriever, judge: Judge):
         self.retriever = retriever
@@ -221,23 +220,23 @@ class LangGraphVerifier:
             return
         initial: VerifierState = {"claims": claims, "current_index": 0,
                                   "passages": [], "verdicts": []}
-        # 2 étapes par claim (retrieve + judge) : la limite par défaut de
-        # LangGraph (25 étapes) ferait planter une réponse de plus de 12 claims.
+        # 2 steps per claim (retrieve + judge): LangGraph's default limit (25
+        # steps) would crash an answer with more than 12 claims.
         config = {"recursion_limit": 2 * len(claims) + 5}
-        # stream() rend la sortie de chaque noeud dès qu'il a fini : après
-        # chaque passage dans "judge", le dernier verdict ajouté est prêt.
+        # stream() yields each node's output as soon as it finishes: after each
+        # pass through "judge", the last verdict added is ready.
         for update in self.graph.stream(initial, config, stream_mode="updates"):
             if "judge" in update:
                 yield update["judge"]["verdicts"][-1]
 
 
 # ---------------------------------------------------------------------------
-# Point d'entrée
+# Entry point
 # ---------------------------------------------------------------------------
 
 def read_claims_file(path: str) -> list[Claim]:
-    """Lit les claims d'un fichier JSON : la sortie de decomposition.py
-    ({"claims": [...]}) ou directement une liste de claims."""
+    """Reads the claims of a JSON file: the output of decomposition.py
+    ({"claims": [...]}) or a plain list of claims."""
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     raw = data["claims"] if isinstance(data, dict) else data
@@ -250,34 +249,34 @@ def print_summary(verdicts: list[Verdict]):
         counts[v.verdict] += 1
 
     print("\n" + "=" * 100)
-    print("RÉSUMÉ DE LA VÉRIFICATION")
+    print("VERIFICATION SUMMARY")
     print("=" * 100)
     detail = ", ".join(f"{n} {label}" for label, n in counts.items() if n)
-    print(f"Total : {len(verdicts)} claims — {detail}\n")
+    print(f"Total: {len(verdicts)} claims — {detail}\n")
 
     for v in verdicts:
         print(f"[{VERDICT_ICONS[v.verdict]}] {v.claim_id} — {v.verdict.upper()}")
-        print(f"    Claim : {v.claim}")
-        print(f"    Justification : {v.justification}")
+        print(f"    Claim: {v.claim}")
+        print(f"    Justification: {v.justification}")
         if v.contradicting_sources:
-            print(f"    Sources en contradiction : {v.contradicting_sources}")
+            print(f"    Contradicting sources: {v.contradicting_sources}")
         print()
 
 
 def main():
-    # Import local : factory importe ce module, l'importer en tête serait circulaire.
+    # Local import: factory imports this module, importing it at the top would be circular.
     from claimverify.factory import build_embedder, build_retriever, build_verifier
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--claims_file", type=str, default=None,
-                         help="Fichier JSON contenant les claims (sortie de decomposition.py).")
+                         help="JSON file holding the claims (output of decomposition.py).")
     add_db_url_argument(parser)
     add_config_argument(parser)
     parser.add_argument("--save_json", type=str, default=None,
-                         help="Chemin optionnel pour sauvegarder les verdicts en JSON.")
+                         help="Optional path to save the verdicts as JSON.")
     parser.add_argument("--debug_claim", type=str, default=None,
-                         help="Mode debug : affiche les chunks bruts récupérés pour CE texte de "
-                              "claim (sans appel LLM), au lieu de lancer la vérification complète.")
+                         help="Debug mode: prints the raw chunks retrieved for THIS claim text "
+                              "(no LLM call), instead of running the full verification.")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -291,12 +290,12 @@ def main():
         return
 
     if not args.claims_file:
-        raise RuntimeError("--claims_file est requis en dehors du mode --debug_claim.")
+        raise RuntimeError("--claims_file is required outside --debug_claim mode.")
 
     claims = read_claims_file(args.claims_file)
 
     verifier = build_verifier(settings, build_embedder(settings), conn)
-    print(f"\nVérification de {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")
+    print(f"\nVerifying {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")
     verdicts = list(verifier.verify(claims))
     conn.close()
 
@@ -305,7 +304,7 @@ def main():
     if args.save_json:
         with open(args.save_json, "w", encoding="utf-8") as f:
             json.dump([v.model_dump() for v in verdicts], f, ensure_ascii=False, indent=2)
-        print(f"Verdicts sauvegardés dans {args.save_json}")
+        print(f"Verdicts saved to {args.save_json}")
 
 
 if __name__ == "__main__":

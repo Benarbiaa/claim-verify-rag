@@ -1,27 +1,27 @@
 """
-Évaluation du retrieval — la recherche ramène-t-elle la preuve ?
-=================================================================
+Retrieval evaluation — does the search bring back the proof?
+============================================================
 
-Avant même que le juge lise quoi que ce soit, la recherche doit lui apporter
-le passage qui contient la preuve. Pour chaque paire claim -> citation (gold
-set et jeu de retrieval), on classe TOUS les chunks du document de la
-citation par similarité au claim, comme le fait la recherche par document, et
-on note le RANG du premier chunk qui contient la citation :
+Before the judge reads anything, the search must bring it the passage that
+holds the proof. For each claim -> quote pair (gold set and retrieval set),
+ALL the chunks of the quote's document are ranked by similarity to the claim,
+as the per-document search does, and the RANK of the first chunk that holds
+the quote is recorded:
 
-    rang 1 : la preuve est dans le meilleur chunk du document
-    rang 3 : elle n'est vue qu'avec top_k_per_doc >= 3
+    rank 1: the proof is in the document's best chunk
+    rank 3: it is only seen with top_k_per_doc >= 3
 
-Un seul passage donne donc le rappel pour tous les k (1, 2, 3, 5...). Une
-citation à cheval sur deux chunks n'est "trouvée" qu'en partie : on note aussi
-le rang du premier chunk qui en contient un morceau.
+So a single run gives the recall for every k (1, 2, 3, 5...). A quote that
+straddles two chunks is only "partly found": the rank of the first chunk
+holding a piece of it is recorded too.
 
-C'est une borne BASSE : un autre chunk peut dire la même chose autrement
-(un résultat repris dans la conclusion), ce qui suffit au juge mais n'est pas
-détectable automatiquement.
+This is a LOWER bound: another chunk may say the same thing differently (a
+result repeated in the conclusion), which is enough for the judge but cannot
+be detected automatically.
 
-La recherche se fait EN MÉMOIRE (produit scalaire des vecteurs normalisés,
-c'est-à-dire la similarité cosinus de pgvector) : comparer des tailles de
-chunks ne touche pas la table réelle. Aucun appel LLM.
+The search runs IN MEMORY (dot product of normalized vectors, i.e. pgvector's
+cosine similarity): comparing chunk sizes does not touch the real table. No
+LLM call.
 """
 
 import math
@@ -34,12 +34,12 @@ from claimverify.contracts import Chunk, Document
 
 K_VALUES = (1, 2, 3, 5)
 METHODS = ("dense", "bm25", "hybrid", "rerank")
-RERANK_CANDIDATES = 10  # candidats par document relus par le reranker
+RERANK_CANDIDATES = 10  # candidates per document reread by the reranker
 
 
 @dataclass(frozen=True)
 class Target:
-    """Ce qu'on cherche : la citation `quote` de `filename`, pour le claim `claim`."""
+    """What is searched for: the quote `quote` of `filename`, for the claim `claim`."""
     id: str
     claim: str
     filename: str
@@ -49,19 +49,19 @@ class Target:
 @dataclass(frozen=True)
 class Found:
     target: Target
-    rank: int | None          # rang du premier chunk contenant toute la citation
-    rank_partial: int | None  # rang du premier chunk en contenant au moins un morceau
+    rank: int | None          # rank of the first chunk holding the whole quote
+    rank_partial: int | None  # rank of the first chunk holding at least a piece of it
     chunks_in_doc: int
-    score: float | None       # similarité du chunk au rang `rank` (ou partiel)
+    score: float | None       # similarity of the chunk at rank `rank` (or partial)
 
 
-# --- Où est la citation dans le document ? ------------------------------------------------
+# --- Where is the quote in the document? --------------------------------------------------
 
 def quote_spans(text: str, quote: str) -> list[tuple[int, int]]:
-    """Positions (début, fin) de CHAQUE occurrence de la citation dans le texte
-    original, en ignorant espaces, retours à la ligne et traits d'union, comme
-    le vérificateur du gold set. Un article répète souvent une phrase (résumé,
-    introduction) : la preuve est vue si l'UNE d'elles est ramenée."""
+    """Positions (start, end) of EACH occurrence of the quote in the original
+    text, ignoring spaces, line breaks and hyphens, like the gold set's
+    checker. A paper often repeats a sentence (abstract, introduction): the
+    proof is seen if ANY of them is retrieved."""
     signature, positions = [], []
     for i, ch in enumerate(text):
         for c in unicodedata.normalize("NFKC", ch):
@@ -77,29 +77,29 @@ def quote_spans(text: str, quote: str) -> list[tuple[int, int]]:
 
 
 def chunk_spans(text: str, chunks: list[Chunk]) -> list[tuple[int, int]]:
-    """Position de chaque chunk dans son document : un chunk est une tranche
-    exacte du texte, dans l'ordre (voir chunking.py)."""
+    """Position of each chunk in its document: a chunk is an exact slice of
+    the text, in order (see chunking.py)."""
     spans, cursor = [], 0
     for c in chunks:
         start = text.find(c.text, cursor)
         if start < 0:
-            raise ValueError(f"{c.chunk_id} n'est pas une tranche de son document")
+            raise ValueError(f"{c.chunk_id} is not a slice of its document")
         spans.append((start, start + len(c.text)))
-        cursor = start + 1  # les chunks se chevauchent : le suivant commence après le début
+        cursor = start + 1  # chunks overlap: the next one starts after this one's start
     return spans
 
 
-# --- La recherche, en mémoire ------------------------------------------------------------
+# --- The search, in memory ---------------------------------------------------------------
 
 class InMemoryIndex:
-    """Les chunks d'un corpus, classés par document comme le fait
-    search_per_document, mais sans base de données, selon trois méthodes :
+    """A corpus's chunks, ranked per document as search_per_document does, but
+    with no database, by one of four methods:
 
-        dense   par le sens : cosinus des embeddings (la recherche actuelle)
-        bm25    par les mots : BM25, poids des mots calculés sur TOUT le corpus
-        hybrid  les deux classements fusionnés par leurs rangs (RRF)
-        rerank  hybrid, puis les RERANK_CANDIDATES premiers re-triés par un
-                cross-encodeur qui lit le claim et chaque chunk ensemble"""
+        dense   by meaning: cosine of the embeddings
+        bm25    by words: BM25, word weights computed over the WHOLE corpus
+        hybrid  both rankings fused by their ranks (RRF)
+        rerank  hybrid, then its RERANK_CANDIDATES first re-sorted by a
+                cross-encoder that reads the claim and each chunk together"""
 
     def __init__(self, documents: list[Document], chunks: list[Chunk], embedder,
                  reranker: Reranker | None = None, candidates: int = RERANK_CANDIDATES):
@@ -109,7 +109,7 @@ class InMemoryIndex:
         self.texts = {d.filename: d.text for d in documents}
         self.vectors = embedder.embed_texts([c.text for c in chunks])
         self.bm25 = Bm25Index([c.text for c in chunks])
-        # par document : (indice du chunk dans `chunks`, sa position dans le texte)
+        # per document: (index of the chunk in `chunks`, its position in the text)
         self.by_doc: dict[str, list[tuple[int, tuple[int, int]]]] = {}
         for d in documents:
             mine = [i for i, c in enumerate(chunks) if c.filename == d.filename]
@@ -117,9 +117,9 @@ class InMemoryIndex:
             self.by_doc[d.filename] = list(zip(mine, spans, strict=True))
 
     def ranking(self, claim: str, filename: str, method: str = "dense") -> list[tuple[tuple[int, int], float]]:
-        """(position, score) de chaque chunk du document, du meilleur au moins bon."""
+        """(position, score) of each chunk of the document, best first."""
         if method not in METHODS:
-            raise ValueError(f"méthode inconnue {method!r} (disponibles : {METHODS})")
+            raise ValueError(f"unknown method {method!r} (available: {METHODS})")
         items = self.by_doc[filename]
         query = self.embedder.embed_query(claim)
         dense = {i: sum(a * b for a, b in zip(query, self.vectors[i], strict=True)) for i, _ in items}
@@ -137,15 +137,15 @@ class InMemoryIndex:
         fused = reciprocal_rank_fusion([by_score(dense), by_score(words)])
         if method == "rerank":
             if self.reranker is None:
-                raise ValueError("la méthode 'rerank' demande un reranker")
+                raise ValueError("the 'rerank' method needs a reranker")
             head = rerank(claim, fused[:self.candidates], self.chunk_texts, self.reranker)
             fused = head + fused[self.candidates:]
-        return [(span[i], dense[i]) for i in fused]  # score affiché : le cosinus, pour comparer
+        return [(span[i], dense[i]) for i in fused]  # displayed score: the cosine, to compare
 
     def find(self, target: Target, method: str = "dense") -> Found:
         quotes = quote_spans(self.texts[target.filename], target.quote)
         if not quotes:
-            raise ValueError(f"{target.id} : citation introuvable dans {target.filename}")
+            raise ValueError(f"{target.id}: quote not found in {target.filename}")
         ranking = self.ranking(target.claim, target.filename, method)
         rank = rank_partial = score = None
         for r, ((start, end), s) in enumerate(ranking, start=1):
@@ -157,18 +157,18 @@ class InMemoryIndex:
         return Found(target, rank, rank_partial, len(ranking), score)
 
 
-# --- Résumés -------------------------------------------------------------------------
+# --- Summaries -----------------------------------------------------------------------
 
 def recall_at(found: list[Found], k: int, partial: bool = False) -> int:
-    """Nombre de citations dont le chunk est dans les k premiers de son document."""
+    """Number of quotes whose chunk is among the first k of its document."""
     def rank(f: Found) -> int | None:
         return f.rank_partial if partial else f.rank
     return sum(1 for f in found if rank(f) is not None and rank(f) <= k)
 
 
 def wilson_interval(hits: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """Intervalle de confiance à 95 % d'une proportion mesurée sur peu
-    d'exemples (Wilson) : 9/11 -> environ 52 % à 95 %."""
+    """95 % confidence interval of a proportion measured on few items
+    (Wilson): 9/11 -> about 52 % to 95 %."""
     if n == 0:
         return 0.0, 1.0
     p = hits / n
@@ -178,7 +178,7 @@ def wilson_interval(hits: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 
 def paired_changes(before: list[Found], after: list[Found], k: int) -> tuple[list[str], list[str]]:
-    """Comparaison citation par citation entre deux réglages : (gagnées, perdues) au rang k."""
+    """Quote-by-quote comparison of two settings: (gained, lost) at rank k."""
     def hit(f: Found) -> bool:
         return f.rank is not None and f.rank <= k
     old = {f.target.id: hit(f) for f in before}

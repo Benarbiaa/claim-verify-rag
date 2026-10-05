@@ -1,17 +1,17 @@
 """
-Événements des pipelines — ce que chaque étape a produit
-=========================================================
+Pipeline events — what each stage produced
+==========================================
 
-Après chaque étape, l'orchestrateur (indexing/ingest.py, answering/pipeline.py)
-émet un événement qui contient la SORTIE de l'étape. Des "sinks" les reçoivent
-(voir reporting.py) : une ligne courte dans le terminal, l'enregistrement
-complet dans runs/<run_id>/events.jsonl, et plus tard l'interface.
+After each stage, the orchestrator (indexing/ingest.py, answering/pipeline.py)
+emits an event holding the stage's OUTPUT. "Sinks" receive them (see
+reporting.py): one short line in the terminal, the full record in
+runs/<run_id>/events.jsonl, and the UI.
 
-Les étapes elles-mêmes n'émettent rien : elles restent indépendantes de tout
-affichage (patron observateur, l'orchestrateur étant le seul émetteur).
+The stages themselves emit nothing: they stay independent of any display
+(observer pattern, the orchestrator being the only emitter).
 
-Chaque événement a un champ "type" : un fichier events.jsonl se relit en
-objets identiques (load_events dans reporting.py).
+Every event has a "type" field: an events.jsonl file reads back into
+identical objects (load_events in reporting.py).
 """
 
 from datetime import datetime, timezone
@@ -25,13 +25,13 @@ Pipeline = Literal["indexing", "answering"]
 
 
 class Usage(BaseModel):
-    """Appels aux LLM pendant une étape (tout à zéro pour une étape sans LLM)."""
+    """LLM calls during a stage (all zero for a stage without an LLM)."""
     calls: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
-    retries: int = 0            # nouvelles tentatives après une erreur temporaire
-    waited_seconds: float = 0   # temps passé à attendre avant ces tentatives
-    seconds: float = 0          # durée totale des appels, attentes comprises
+    retries: int = 0            # new attempts after a temporary error
+    waited_seconds: float = 0   # time spent waiting before those attempts
+    seconds: float = 0          # total duration of the calls, waits included
 
     def __add__(self, other: "Usage") -> "Usage":
         return Usage(**{name: getattr(self, name) + getattr(other, name)
@@ -39,18 +39,18 @@ class Usage(BaseModel):
 
 
 class Event(BaseModel):
-    """Champs communs, remplis par Run.emit (reporting.py)."""
+    """Common fields, filled in by Run.emit (reporting.py)."""
     run_id: str
     pipeline: Pipeline
     time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# --- Les deux pipelines -----------------------------------------------------------
+# --- Both pipelines -----------------------------------------------------------------
 
 class RunStarted(Event):
     type: Literal["run_started"] = "run_started"
-    config: dict       # config.yaml complet, pour reproduire le run
-    inputs: dict       # ex. {"corpus_dir": ...} ou {"questions": [...]}
+    config: dict       # the whole config.yaml, to reproduce the run
+    inputs: dict       # e.g. {"corpus_dir": ...} or {"questions": [...]}
 
 
 class RunFinished(Event):
@@ -59,10 +59,10 @@ class RunFinished(Event):
     seconds: float
 
 
-# --- Indexation --------------------------------------------------------------------
+# --- Indexing ----------------------------------------------------------------------
 
 class DocumentSummary(BaseModel):
-    """Un document sans son texte (le texte est dans data/corpus/)."""
+    """A document without its text (the text is in data/corpus/)."""
     doc_id: str
     filename: str
     source_type: str
@@ -76,11 +76,11 @@ class DocumentsLoaded(Event):
 
 
 class CleaningSummary(BaseModel):
-    """Ce que le nettoyage a changé dans un document (le texte n'est pas copié)."""
+    """What the cleaning changed in a document (the text is not copied)."""
     filename: str
     characters_before: int
     characters_after: int
-    changes: dict[str, int]  # règle -> nombre de réparations
+    changes: dict[str, int]  # rule -> number of repairs
 
 
 class DocumentsCleaned(Event):
@@ -91,7 +91,7 @@ class DocumentsCleaned(Event):
 
 class ChunksBuilt(Event):
     type: Literal["chunks_built"] = "chunks_built"
-    chunks: list[Chunk]  # sans vecteur : les vecteurs sont dans la base
+    chunks: list[Chunk]  # without vectors: the vectors are in the database
     seconds: float
 
 
@@ -108,7 +108,7 @@ class ChunksStored(Event):
     seconds: float
 
 
-# --- Réponse à une question (question_index : position dans le run) -----------------
+# --- Answering a question (question_index: position in the run) ---------------------
 
 class QuestionStarted(Event):
     type: Literal["question_started"] = "question_started"
@@ -143,22 +143,22 @@ class ClaimsExtracted(Event):
 class ClaimVerified(Event):
     type: Literal["claim_verified"] = "claim_verified"
     question_index: int
-    position: int      # 1, 2, ... sur `total`
+    position: int      # 1, 2, ... out of `total`
     total: int
-    verdict: Verdict   # contient les passages jugés (evidence)
+    verdict: Verdict   # holds the passages judged (evidence)
     usage: Usage = Usage()
 
 
 class LLMWaiting(Event):
-    """Un appel LLM attend avant une nouvelle tentative (ex. limite par minute).
-    Émis PENDANT une étape, contrairement aux autres : une interface peut
-    afficher le compte à rebours au lieu de sembler figée."""
+    """An LLM call waits before a new attempt (e.g. a per-minute limit).
+    Emitted DURING a stage, unlike the others: a UI can show the countdown
+    instead of looking frozen."""
     type: Literal["llm_waiting"] = "llm_waiting"
     question_index: int | None = None
     role: str          # draft, decompose, verify
     model: str
-    seconds: float     # attente annoncée
-    attempt: int       # la tentative qui vient d'échouer
+    seconds: float     # announced wait
+    attempt: int       # the attempt that just failed
     reason: str        # rate_limit, server_error, connection
 
 

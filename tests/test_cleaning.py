@@ -101,5 +101,5 @@ def test_the_guarantee_accepts_layout_repairs():
 
 
 def test_the_guarantee_rejects_any_lost_word():
-    with pytest.raises(RuntimeError, match="a modifié le contenu"):
+    with pytest.raises(RuntimeError, match="changed the content"):
         check_no_content_lost("results do not improve", "results do improve", "a.pdf")

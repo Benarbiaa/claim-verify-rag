@@ -61,7 +61,7 @@ def test_an_unknown_stage_type_is_rejected():
 def test_an_undeclared_provider_is_rejected():
     cfg = raw_config()
     cfg["answering"]["drafter"]["provider"] = "openrouter"
-    with pytest.raises(ValidationError, match="fournisseur inconnu 'openrouter'"):
+    with pytest.raises(ValidationError, match="unknown provider 'openrouter'"):
         Settings.model_validate(cfg)
 
 
@@ -140,7 +140,7 @@ def test_without_rerank_the_search_is_used_directly(settings):
 def test_fewer_candidates_than_kept_passages_is_refused():
     cfg = raw_config()
     cfg["answering"]["verifier"]["retriever"]["rerank"]["candidates"] = 1
-    with pytest.raises(ValidationError, match="doit être >= top_k_per_doc"):
+    with pytest.raises(ValidationError, match="must be >= top_k_per_doc"):
         Settings.model_validate(cfg)
 
 

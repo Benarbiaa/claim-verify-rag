@@ -1,17 +1,17 @@
 """
-Retrieval côté réponse — question vers Passages
-=================================================
+Retrieval for answering — question to Passages
+==============================================
 
-La recherche elle-même (SQL pgvector) est dans components/store.py, et
-l'embedding de la requête dans components/embedding.py. Le retriever les
-reçoit tous les deux : il ne crée ni modèle ni connexion.
+The search itself (pgvector SQL) is in components/store.py, and the query's
+embedding in components/embedding.py. The retriever receives both: it creates
+no model and no connection.
 
-Deux implémentations, choisies dans config.yaml (type) :
-    pgvector  par le sens seulement (embeddings)
-    hybrid    par le sens ET par les mots (BM25), classements fusionnés
-et, en option (rerank), un RerankingRetriever qui enveloppe l'une ou l'autre :
-il lui demande plus de candidats par document, puis les fait relire par un
-cross-encodeur et garde les meilleurs.
+Two implementations, chosen in config.yaml (type):
+    pgvector  by meaning only (embeddings)
+    hybrid    by meaning AND by words (BM25), rankings fused
+and, optionally (rerank), a RerankingRetriever that wraps either one: it asks
+it for more candidates per document, has a cross-encoder reread them, and
+keeps the best.
 """
 
 from functools import cached_property
@@ -31,13 +31,13 @@ from claimverify.contracts import Passage
 
 @runtime_checkable
 class Retriever(Protocol):
-    """Interface : trouve les passages du corpus pertinents pour un texte."""
+    """Interface: finds the corpus passages relevant to a text."""
 
     def retrieve(self, query: str) -> list[Passage]: ...
 
 
 class PgvectorRetriever:
-    """Implémentation : top-k PAR document dans pgvector (chaque source est représentée)."""
+    """Implementation: top-k PER document in pgvector (every source is represented)."""
 
     def __init__(self, embedder: Embedder, conn, top_k_per_doc: int = TOP_K_PER_DOC):
         self.embedder = embedder
@@ -49,19 +49,19 @@ class PgvectorRetriever:
 
 
 class HybridRetriever:
-    """Implémentation : top-k PAR document, après fusion de deux classements.
+    """Implementation: top-k PER document, after fusing two rankings.
 
-    Dans un même article, tous les chunks parlent du même sujet : les scores
-    d'embedding sont très proches, et le détail qui fait la preuve (un chiffre,
-    un nom) pèse à peine. BM25 classe par les mots exacts, pondérés par leur
-    rareté dans le corpus. Les deux classements de chaque document sont
-    fusionnés par leurs rangs (reciprocal_rank_fusion, sans poids à régler).
-    Mesuré sur 44 citations (make eval-retrieval) : la preuve est dans les 2
-    premiers passages de son document pour 31/44, contre 23/44 par le sens seul.
+    Within one paper every chunk is about the same topic: embedding scores are
+    very close, and the detail that makes the proof (a figure, a name) barely
+    counts. BM25 ranks by exact words, weighted by their rarity in the corpus.
+    The two rankings of each document are fused by their ranks
+    (reciprocal_rank_fusion, no weight to tune). Measured on 44 quotes (make
+    eval-retrieval): the proof is in its document's first 2 passages for
+    31/44, against 23/44 by meaning alone.
 
-    L'index BM25 est construit au premier appel depuis les chunks stockés, puis
-    gardé : il faut un nouveau retriever après une réindexation (c'est le cas,
-    la factory en construit un par run)."""
+    The BM25 index is built on the first call from the stored chunks, then
+    kept: a new retriever is needed after a re-index (which is the case, the
+    factory builds one per run)."""
 
     def __init__(self, embedder: Embedder, conn, top_k_per_doc: int = TOP_K_PER_DOC):
         self.embedder = embedder
@@ -84,25 +84,25 @@ class HybridRetriever:
             by_words = sorted(by_meaning, key=lambda i: words.get((filename, i), 0.0), reverse=True)
             best = reciprocal_rank_fusion([by_meaning, by_words])[:self.top_k_per_doc]
             chosen = {p.chunk_index: p for p in passages}
-            results += [chosen[i] for i in best]  # le score affiché reste le cosinus
+            results += [chosen[i] for i in best]  # the displayed score stays the cosine
 
         results.sort(key=lambda p: p.score, reverse=True)
         return results
 
 
 class RerankingRetriever:
-    """Enveloppe un retriever : ses `candidates` meilleurs passages par document
-    sont relus par un cross-encodeur (le claim et le passage ENSEMBLE), qui
-    garde les `top_k_per_doc` qui répondent le mieux.
+    """Wraps a retriever: its `candidates` best passages per document are
+    reread by a cross-encoder (the claim and the passage TOGETHER), which keeps
+    the `top_k_per_doc` that answer best.
 
-    La recherche trouve la preuve parmi ses candidats sans bien la classer
-    (scores d'embedding serrés dans un même article) ; le reranker la classe.
-    Mesuré sur 44 citations (make eval-retrieval) : la preuve est dans les 2
-    premiers passages de son document pour 37/44 avec hybrid + reranker,
-    31/44 avec hybrid seul, 23/44 par le sens seul."""
+    The search finds the proof among its candidates without ranking it well
+    (embedding scores packed together within one paper); the reranker ranks
+    it. Measured on 44 quotes (make eval-retrieval): the proof is in its
+    document's first 2 passages for 37/44 with hybrid + reranker, 31/44 with
+    hybrid alone, 23/44 by meaning alone."""
 
     def __init__(self, base: Retriever, reranker: Reranker, top_k_per_doc: int = TOP_K_PER_DOC):
-        self.base = base          # construit pour ramener `candidates` passages par document
+        self.base = base          # built to bring `candidates` passages per document
         self.reranker = reranker
         self.top_k_per_doc = top_k_per_doc
 
@@ -117,7 +117,7 @@ class RerankingRetriever:
             order = sorted(range(len(passages)), key=lambda j: scores[j], reverse=True)
             results += [passages[j] for j in order[:self.top_k_per_doc]]
 
-        results.sort(key=lambda p: p.score, reverse=True)  # le score affiché reste le cosinus
+        results.sort(key=lambda p: p.score, reverse=True)  # the displayed score stays the cosine
         return results
 
 

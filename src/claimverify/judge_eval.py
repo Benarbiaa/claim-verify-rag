@@ -1,18 +1,18 @@
 """
-Évaluation du juge — ses verdicts face au gold set
-===================================================
+Judge evaluation — its verdicts against the gold set
+====================================================
 
-Chaque claim du gold set (eval/claims_gold.jsonl) passe par le VRAI
-vérificateur de config.yaml (recherche + juge LLM), comme dans le pipeline,
-sans brouillon ni décomposition. Son verdict est comparé à l'étiquette prouvée.
+Each claim of the gold set (eval/claims_gold.jsonl) goes through the REAL
+verifier of config.yaml (search + LLM judge), as in the pipeline, without a
+draft or a decomposition. Its verdict is compared with the proven label.
 
-Pour chaque erreur, on distingue deux causes :
-    la preuve n'était pas dans les passages lus  -> échec du RETRIEVAL
-    la preuve y était, et le verdict est faux     -> échec du JUGE
-Sans cette distinction, un mauvais score ne dit pas quoi corriger.
+Each error is given one of two causes:
+    the proof was not in the passages read   -> a RETRIEVAL failure
+    the proof was there, the verdict is wrong -> a JUDGE failure
+Without this distinction, a bad score does not say what to fix.
 
-Avec 10 claims (2 par catégorie), c'est un test de fumée : les résultats se
-lisent en comptes ("1/2"), pas en pourcentages.
+With 10 claims (2 per category), this is a smoke test: results read as
+counts ("1/2"), not percentages.
 """
 
 from collections import Counter
@@ -30,12 +30,12 @@ class Scored:
     gold: GoldClaim
     verdict: Verdict
     correct: bool
-    proof_seen: bool | None    # toutes les citations de preuve étaient-elles dans les passages lus ? (None : aucune)
-    sources_ok: bool           # les sources citées par le juge contiennent-elles celles du gold set ?
+    proof_seen: bool | None    # were all the proof quotes in the passages read? (None: no quote)
+    sources_ok: bool           # do the sources the judge cited include the gold set's?
 
 
 def proof_seen(gold: GoldClaim, verdict: Verdict) -> bool | None:
-    """Chaque citation du gold set se trouve-t-elle dans un passage que le juge a lu ?"""
+    """Is each quote of the gold set in a passage the judge read?"""
     if not gold.evidence:
         return None
     read = {p.filename: [] for p in verdict.evidence}
@@ -54,7 +54,7 @@ def sources_ok(gold: GoldClaim, verdict: Verdict) -> bool:
 
 
 def score(gold: list[GoldClaim], verdicts: dict[str, Verdict]) -> list[Scored]:
-    """Les claims du gold set qui ont un verdict (un run arrêté en cours en a moins)."""
+    """The gold claims that have a verdict (a run stopped midway has fewer)."""
     return [Scored(g, verdicts[g.id], verdicts[g.id].verdict == g.expected,
                    proof_seen(g, verdicts[g.id]), sources_ok(g, verdicts[g.id]))
             for g in gold if g.id in verdicts]

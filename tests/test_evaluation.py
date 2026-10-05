@@ -31,7 +31,7 @@ def one_per_category() -> list[GoldClaim]:
 def test_a_supported_claim_needs_a_quote_for_it_and_none_against():
     GoldClaim.model_validate(claim())
     against = {"filename": "b.pdf", "stance": "contradicts", "quote": QUOTE_B}
-    with pytest.raises(ValidationError, match="aucune contre"):
+    with pytest.raises(ValidationError, match="none against"):
         GoldClaim.model_validate(claim(evidence=[claim()["evidence"][0], against]))
 
 
@@ -39,13 +39,13 @@ def test_a_contested_claim_needs_two_documents_that_disagree():
     pro = {"filename": "a.pdf", "stance": "supports", "quote": QUOTE_A}
     GoldClaim.model_validate(claim("contested", [pro, {"filename": "b.pdf", "stance": "contradicts", "quote": QUOTE_B}]))
     same_doc = {"filename": "a.pdf", "stance": "contradicts", "quote": QUOTE_A}
-    with pytest.raises(ValidationError, match="documents différents"):
+    with pytest.raises(ValidationError, match="different documents"):
         GoldClaim.model_validate(claim("contested", [pro, same_doc]))
 
 
 def test_an_unverifiable_claim_has_no_quote():
     GoldClaim.model_validate(claim("unverifiable", []))
-    with pytest.raises(ValidationError, match="aucune citation"):
+    with pytest.raises(ValidationError, match="no quote"):
         GoldClaim.model_validate(claim("unverifiable"))
 
 
@@ -66,7 +66,7 @@ def test_unknown_fields_and_categories_are_refused():
 def test_the_file_is_read_line_by_line_and_errors_name_the_line(tmp_path):
     path = tmp_path / "gold.jsonl"
     path.write_text(json.dumps(claim()) + "\n\n" + json.dumps(claim("unverifiable")) + "\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="ligne 3"):
+    with pytest.raises(ValueError, match="line 3"):
         load_gold(path)
     path.write_text(json.dumps(claim()) + "\n", encoding="utf-8")
     assert [c.id for c in load_gold(path)] == ["g01"]
@@ -83,7 +83,7 @@ def test_a_modified_or_invented_quote_is_caught():
     claims = one_per_category()
     claims[0].evidence[0].quote = "LumberChunker uses GPT-4 to find semantic shifts in narrative text."
     [problem] = check_gold(claims, DOCS)
-    assert "citation introuvable dans a.pdf" in problem
+    assert "quote not found in a.pdf" in problem
 
 
 def test_unknown_files_duplicate_ids_and_missing_categories_are_reported():
@@ -91,6 +91,6 @@ def test_unknown_files_duplicate_ids_and_missing_categories_are_reported():
     claims[1].id = claims[0].id
     claims[2].evidence[0].filename = "missing.pdf"
     problems = check_gold(claims, DOCS)
-    assert any("id en double" in p for p in problems)
-    assert any("missing.pdf n'est pas dans le corpus" in p for p in problems)
-    assert any("aucun claim dans la catégorie out_of_corpus" in p for p in problems)
+    assert any("duplicate id" in p for p in problems)
+    assert any("missing.pdf is not in the corpus" in p for p in problems)
+    assert any("no claim in the category out_of_corpus" in p for p in problems)

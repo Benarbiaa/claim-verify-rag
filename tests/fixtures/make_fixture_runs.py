@@ -1,28 +1,28 @@
 """
-Runs de test pour l'interface — un run "contested" qui n'existe pas encore en vrai
-==================================================================================
+Test runs for the UI — a "contested" run before one existed for real
+====================================================================
 
-Aucun vrai run ne contient encore de verdict "contested" (ni "contradicted",
-ni "error"). Ce script construit un run de réponse qui montre les cinq
-verdicts, pour tester l'interface et la présenter : c'est une FIXTURE,
-affichée comme telle (source "fixture", voir api/runs.py).
+When this was written, no real run held a "contested" verdict (nor
+"contradicted", nor "error"). This script builds an answering run showing all
+five verdicts, to test the UI and present it: it is a FIXTURE, shown as such
+(source "fixture", see api/runs.py).
 
-    - Les passages sont de vrais chunks du corpus (data/corpus, découpés avec
-      la config actuelle) : aucun texte de source n'est inventé.
-    - La question, le brouillon, les claims et les réponses du juge sont
-      écrits à la main. Les verdicts passent quand même par le vrai code du
-      juge (judge_with_llm, avec un faux LLM) : ils respectent le contrat
-      Verdict, et une réponse invalide y devient "error".
-    - Les durées, tokens et attentes sont plausibles mais inventés.
+    - The passages are real chunks of the corpus (data/corpus, cut with the
+      config of the time): no source text is invented.
+    - The question, the draft, the claims and the judge's answers are written
+      by hand. The verdicts still go through the real judge code
+      (judge_with_llm, with a fake LLM): they respect the Verdict contract,
+      and an invalid answer becomes "error".
+    - The durations, tokens and waits are plausible but invented.
 
-Usage (pas de réseau, pas de GPU, pas de base) :
+Usage (no network, no GPU, no database):
     python tests/fixtures/make_fixture_runs.py
 
-Le run produit est versionné (tests/fixtures/runs/) : c'est lui la référence,
-lue par les tests de l'interface. Ce script choisit ses passages par
-(fichier, numéro de chunk) dans le découpage d'ALORS (512 mots). Depuis le
-découpage en tokens, ces numéros désignent d'autres textes : avant de le
-relancer, il faut re-choisir les passages pour qu'ils collent aux claims.
+The run produced is committed (tests/fixtures/runs/): it is the reference,
+read by the UI's tests. This script picks its passages by (file, chunk
+number) in the chunking of THAT time (512 words). Since chunking switched to
+tokens, those numbers point to other texts: before running it again, the
+passages must be picked again to match the claims.
 """
 
 import json
@@ -64,7 +64,7 @@ ANTHROPIC = "anthropic-contextual-retrieval.md"
 
 QUESTION = "Is it worth chunking documents by meaning instead of by fixed size?"
 
-# (fichier, chunk_index, score) : le retrieval du brouillon, top-2 par document
+# (file, chunk_index, score): the draft's retrieval, top 2 per document
 DRAFT_PASSAGES = [(VECTARA, 5, 0.874), (VECTARA, 1, 0.861), (LUMBER, 5, 0.842), (LUMBER, 1, 0.829),
                   (ANTHROPIC, 0, 0.781), (ANTHROPIC, 1, 0.752), (LEWIS, 0, 0.703), (LEWIS, 9, 0.688)]
 
@@ -81,8 +81,8 @@ DRAFT = (
     "semantic chunking."
 )
 
-# claim, source citée par le brouillon, passages lus par le juge (top-1 par document),
-# réponse brute du juge, usage (tokens in, tokens out, secondes d'appel), attentes avant l'appel
+# claim, source cited by the draft, passages read by the judge (top 1 per document),
+# the judge's raw answer, usage (tokens in, tokens out, call seconds), waits before the call
 CLAIMS = [
     ("LumberChunker asks a language model to find the paragraph where the content starts diverging.",
      f"{LUMBER} | chunk #1", [(LUMBER, 1, 0.884), (VECTARA, 4, 0.701), (ANTHROPIC, 1, 0.655), (LEWIS, 0, 0.612)],
@@ -145,9 +145,9 @@ def chunk_texts() -> dict[tuple[str, int], tuple[str, str]]:
 
 
 def main() -> None:
-    sys.exit("Les passages de ce script viennent du découpage en mots (512 mots), remplacé par le "
-             "découpage en tokens : re-choisir les passages avant de régénérer (voir l'en-tête). "
-             "Le run versionné dans tests/fixtures/runs/ reste la référence.")
+    sys.exit("This script's passages come from the word-based chunking (512 words), replaced by "
+             "token-based chunking: pick the passages again before regenerating (see the header). "
+             "The run committed in tests/fixtures/runs/ remains the reference.")
     texts = chunk_texts()
     settings = load_settings(ROOT / CONFIG_FILE)
     judge_model = settings.answering.verifier.judge.model
