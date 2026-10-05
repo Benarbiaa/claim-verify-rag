@@ -137,6 +137,35 @@ def search_per_document(conn, query_embedding,
         return all_results
 
 
+def rank_all_per_document(conn, query_embedding) -> dict[str, list[Passage]]:
+    """TOUS les chunks de chaque document, du plus au moins similaire (cosinus).
+    Sert à la recherche hybride, qui fusionne ce classement avec celui de BM25 :
+    il lui faut le classement complet, pas seulement le top-k. Sans LIMIT :
+    raisonnable à cette taille de corpus (quelques centaines de chunks)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT filename, source_type, chunk_index, text,
+                   1 - (embedding <=> %s::vector) AS cosine_similarity
+            FROM chunks
+            ORDER BY filename, embedding <=> %s::vector;
+            """,
+            (query_embedding, query_embedding),
+        )
+        ranked: dict[str, list[Passage]] = {}
+        for row in cur.fetchall():
+            passage = _to_passage(row)
+            ranked.setdefault(passage.filename, []).append(passage)
+        return ranked
+
+
+def load_chunk_texts(conn) -> list[tuple[str, int, str]]:
+    """(filename, chunk_index, texte) de chaque chunk : de quoi construire l'index BM25."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT filename, chunk_index, text FROM chunks ORDER BY filename, chunk_index;")
+        return cur.fetchall()
+
+
 def _to_passage(row) -> Passage:
     """Convertit une ligne SQL (filename, source_type, chunk_index, text, score)."""
     filename, source_type, chunk_index, text, score = row

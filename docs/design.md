@@ -53,7 +53,7 @@ flowchart TB
 | Cleaner | minimal repair of PDF extraction: page numbers, NFKC, words split at line ends | none | local |
 | Chunker | fixed windows of 400 tokens **of the embedder**, 15% overlap, cut between words | the embedder's tokenizer | local |
 | Embedder | `BAAI/bge-base-en-v1.5`, 768 dimensions | embedding model | your GPU (CPU works) |
-| Retriever | pgvector, top-k **per document** | the shared embedder | GPU + Postgres |
+| Retriever | **hybrid**: by meaning (pgvector) and by exact words (BM25), rankings fused; top-k **per document** | the shared embedder + BM25 | GPU + Postgres |
 | Drafter | LLM with a grounded, cited prompt | `openai/gpt-oss-120b` | Groq API |
 | Decomposer | LLM in JSON mode | `openai/gpt-oss-120b` | Groq API |
 | Judge | LLM in JSON mode | `qwen/qwen3.8-27b` | Groq API |
@@ -231,12 +231,14 @@ classDiagram
     Chunker <|.. FixedSizeChunker
     Embedder <|.. BgeEmbedder
     Retriever <|.. PgvectorRetriever
+    Retriever <|.. HybridRetriever
     Drafter <|.. LLMDrafter
     Decomposer <|.. LLMDecomposer
     Judge <|.. LLMJudge
     Verifier <|.. LangGraphVerifier
 
     PgvectorRetriever o-- Embedder : receives
+    HybridRetriever o-- Embedder : receives
     FixedSizeChunker o-- BgeEmbedder : counts tokens with
     LangGraphVerifier o-- Retriever : receives
     LangGraphVerifier o-- Judge : receives
@@ -287,11 +289,11 @@ embedding:   type: bge           model · device                        ← shar
 indexing:    loader              type: files
              cleaner             type: minimal | none
              chunker             type: fixed_size · chunk_size (embedder tokens, ≤ 510) · overlap_ratio
-answering:   retriever           type: pgvector · top_k_per_doc        ← used by the drafter
+answering:   retriever           type: hybrid | pgvector · top_k_per_doc ← used by the drafter
              drafter             type: llm · provider · model
              decomposer          type: llm · provider · model
              verifier            type: langgraph
-               retriever         type: pgvector · top_k_per_doc        ← its own retriever
+               retriever         type: hybrid | pgvector · top_k_per_doc ← its own retriever
                judge             type: llm · provider · model
 ```
 
@@ -303,7 +305,7 @@ answering:   retriever           type: pgvector · top_k_per_doc        ← used
 | cleaner | `minimal` → `MinimalCleaner`, `none` → `NoCleaner` |
 | chunker | `fixed_size` → `FixedSizeChunker` |
 | embedding | `bge` → `BgeEmbedder` |
-| retriever | `pgvector` → `PgvectorRetriever` |
+| retriever | `pgvector` → `PgvectorRetriever`, `hybrid` → `HybridRetriever` |
 | drafter / decomposer / judge | `llm` → `LLMDrafter` / `LLMDecomposer` / `LLMJudge` |
 | verifier | `langgraph` → `LangGraphVerifier` |
 
@@ -596,6 +598,7 @@ gave identical results.
 | 14 | **Folders by pipeline**, src layout | find code by purpose; safe imports | flat package, or layers |
 | 15 | **Minimal cleaning** as its own stage, checked by a guarantee | repairs extraction without judging content; works on any future document; measurable (`none` for comparison) | removing references/appendices; classic NLP preprocessing (lowercase, stopwords) |
 | 16 | **Chunks measured in the embedder's tokens**, cut from the original text | the whole chunk is embedded, exactly what the judge reads; case and line breaks kept | words (41% of the text was never embedded); another tokenizer |
+| 17 | **Hybrid retrieval** (meaning + BM25, reciprocal rank fusion) | within one paper all chunks share a topic, so embedding scores are bunched and the exact figure or name that makes the proof barely counts; measured on 44 quotes: proof seen 31/44 vs 23/44, none lost | BM25 alone (38/44, but blind to paraphrases with no shared word); a weighted score sum (a weight tuned on the test set measures nothing) |
 
 ---
 

@@ -83,7 +83,11 @@ them before building the eval baseline**, or the numbers you report will be skew
   400 tokens, k = 2: dense 23/44, **hybrid 31/44** (+8, nothing lost), **BM25 alone 38/44**
   (+16, 1 lost). Both pass the rule fixed beforehand (+4 net, no document losing proofs).
   BM25 wins on these claims because they name exact figures and terms; it cannot match a
-  paraphrase with no shared word, a case this set barely contains. Decision pending.
+  paraphrase with no shared word, a case this set barely contains.
+- [x] **Hybrid search adopted** for the drafter and the judge (`HybridRetriever`, `type: hybrid`
+  in `config.yaml`): checked identical to the measured hybrid search on all 40 claims, so the
+  judge now receives the proof for 31/44 quotes (23 before). `experiments/smoke_k1.yaml` keeps
+  `pgvector`: it documents the recorded run.
 - [ ] Next retrieval step: a reranker (cross-encoder) over the candidates of both searches.
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.

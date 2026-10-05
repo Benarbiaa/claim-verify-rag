@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
-from claimverify.answering.retrieval import PgvectorRetriever, Retriever
+from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.indexing.chunking import Chunker, FixedSizeChunker, Tokenizer
@@ -43,6 +43,7 @@ EMBEDDERS = {
 }
 RETRIEVERS = {
     "pgvector": lambda cfg, embedder, conn: PgvectorRetriever(embedder, conn, cfg.top_k_per_doc),
+    "hybrid": lambda cfg, embedder, conn: HybridRetriever(embedder, conn, cfg.top_k_per_doc),
 }
 DRAFTERS = {
     "llm": lambda llm: LLMDrafter(llm),

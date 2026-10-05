@@ -81,7 +81,7 @@ class ChunkerSettings(_Strict):
 
 
 class RetrieverSettings(_Strict):
-    type: Literal["pgvector"]
+    type: Literal["pgvector", "hybrid"]  # par le sens seulement, ou sens + mots exacts (BM25)
     top_k_per_doc: PositiveInt
 
 

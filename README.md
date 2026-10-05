@@ -24,7 +24,7 @@ question ─► per-document retrieval ─► grounded draft ─► atomic claim
                                                                             draft's citation)
 ```
 
-**Stack:** PostgreSQL + pgvector · `BAAI/bge-base-en-v1.5` (local embeddings) · LangGraph ·
+**Stack:** PostgreSQL + pgvector · `BAAI/bge-base-en-v1.5` (local embeddings) + BM25 (hybrid search) · LangGraph ·
 any OpenAI-compatible LLM. Every stage is chosen and tuned in [`config.yaml`](config.yaml):
 
 | Role | Default model (Groq) | Why |
@@ -64,6 +64,7 @@ Full titles: [`data/info/SOURCES.md`](data/info/SOURCES.md).
 │   ├── config.py, llm.py       #   .env loading (secrets), LLM client
 │   ├── components/             #   shared by both pipelines
 │   │   ├── embedding.py        #     bge model: embeds chunks, questions and claims
+│   │   ├── lexical.py          #     BM25 and rank fusion (hybrid search)
 │   │   └── store.py            #     pgvector: table setup, writing, searching
 │   ├── api/                    #   the web UI's server: run folders, live runs (SSE)
 │   ├── indexing/               #   pipeline 1: files → database

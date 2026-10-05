@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from claimverify.answering.decomposition import LLMDecomposer
 from claimverify.answering.drafting import LLMDrafter
-from claimverify.answering.retrieval import PgvectorRetriever
+from claimverify.answering.retrieval import HybridRetriever
 from claimverify.answering.verification import LangGraphVerifier, LLMJudge
 from claimverify.components.embedding import BgeEmbedder
 from claimverify.factory import build_answering, build_indexing
@@ -109,7 +109,8 @@ def test_cleaning_can_be_turned_off_for_comparison(settings):
 
 def test_build_answering(settings):
     stages = build_answering(settings, conn=None)
-    assert isinstance(stages.retriever, PgvectorRetriever)
+    assert isinstance(stages.retriever, HybridRetriever)
+    assert isinstance(stages.verifier.retriever, HybridRetriever)
     assert isinstance(stages.drafter, LLMDrafter)
     assert isinstance(stages.decomposer, LLMDecomposer)
     assert isinstance(stages.verifier, LangGraphVerifier)

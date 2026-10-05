@@ -36,7 +36,7 @@ indexing:
 
 answering:
   retriever:                     # used by the drafter
-    type: pgvector
+    type: hybrid                 # pgvector: by meaning only; hybrid: meaning + exact words (BM25)
     top_k_per_doc: 2
   drafter:
     type: llm
@@ -49,7 +49,7 @@ answering:
   verifier:
     type: langgraph
     retriever:                   # its own retriever: can differ from the drafter's
-      type: pgvector
+      type: hybrid               # make eval-retrieval: the proof is seen for 31/44 quotes, 23 with pgvector
       top_k_per_doc: 2
     judge:                       # a different model family from the drafter, on purpose
       type: llm

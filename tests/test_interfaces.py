@@ -9,7 +9,7 @@ import pytest
 
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
-from claimverify.answering.retrieval import PgvectorRetriever, Retriever
+from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.contracts import Claim, Document, Draft, Passage, Verdict
@@ -51,8 +51,15 @@ class FakeJudge:
                        justification="fake", verifier="fake")
 
 
+# One document, 5 chunks, in order of meaning (cosine) for any query. Only the 3rd one
+# holds the exact terms "faiss" and "400m".
+HYBRID_CHUNKS = ["RAG overview.", "RAG models in general.", "The index uses FAISS with 400M entries.",
+                 "More about RAG.", "RAG again."]
+
+
 class FakeConnection:
-    """Answers the two queries of search_per_document and records their parameters."""
+    """Answers the queries of search_per_document and of the hybrid search, and records
+    their parameters."""
 
     def __init__(self):
         self.params = []
@@ -68,8 +75,15 @@ class FakeConnection:
 
     def execute(self, sql, params=None):
         self.params.append(params)
-        self._rows = ([("a.pdf",)] if "DISTINCT" in sql
-                      else [("a.pdf", "peer_reviewed_paper", 0, "Evidence.", 0.9)])
+        if "DISTINCT" in sql:
+            self._rows = [("a.pdf",)]
+        elif "SELECT filename, chunk_index, text" in sql:          # texts for BM25
+            self._rows = [("a.pdf", i, t) for i, t in enumerate(HYBRID_CHUNKS)]
+        elif "ORDER BY filename, embedding" in sql:                # full ranking by meaning
+            self._rows = [("a.pdf", "peer_reviewed_paper", i, t, 0.9 - i / 10)
+                          for i, t in enumerate(HYBRID_CHUNKS)]
+        else:                                                       # search_per_document
+            self._rows = [("a.pdf", "peer_reviewed_paper", 0, "Evidence.", 0.9)]
 
     def fetchall(self):
         return self._rows
@@ -86,6 +100,7 @@ def test_implementations_satisfy_their_interfaces():
     assert isinstance(FixedSizeChunker(WordTokenizer()), Chunker)
     assert isinstance(BgeEmbedder(), Embedder)  # lazy: no model is loaded here
     assert isinstance(PgvectorRetriever(FakeEmbedder(), conn=None), Retriever)
+    assert isinstance(HybridRetriever(FakeEmbedder(), conn=None), Retriever)
     assert isinstance(LLMDrafter(fake_llm("x")), Drafter)
     assert isinstance(LLMDecomposer(fake_llm("x")), Decomposer)
     assert isinstance(LLMJudge(fake_llm("x")), Judge)
@@ -138,8 +153,23 @@ def test_query_check_shows_what_the_drafter_retrieves(monkeypatch, capsys, extra
     query_check.main()
 
     # k comes from config.yaml (answering.retriever: 2) unless overridden for this run
-    assert conn.params[-1][-1] == k
-    assert "source=a.pdf" in capsys.readouterr().out
+    assert capsys.readouterr().out.count("source=a.pdf") == k
+
+
+def test_hybrid_retriever_brings_up_a_chunk_that_only_the_exact_words_point_to():
+    conn = FakeConnection()
+    passages = HybridRetriever(FakeEmbedder(), conn, top_k_per_doc=2).retrieve("faiss 400m")
+    # by meaning alone: chunks 0 and 1; the exact terms lift chunk 2 (3rd by meaning) into the top 2
+    assert sorted(p.chunk_index for p in passages) == [0, 2]
+    assert [p.score for p in passages] == sorted((p.score for p in passages), reverse=True)
+
+
+def test_hybrid_retriever_reads_the_chunk_texts_once():
+    conn = FakeConnection()
+    retriever = HybridRetriever(FakeEmbedder(), conn)
+    retriever.retrieve("faiss")
+    retriever.retrieve("400m")
+    assert conn.params.count(None) == 1  # the BM25 texts query has no parameters
 
 
 def test_llm_drafter_returns_a_draft_with_its_passages():
