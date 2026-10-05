@@ -116,10 +116,27 @@ def test_every_quote_becomes_a_target_and_the_report_lists_misses():
     targets = retrieval_targets([gold], [pair])
     assert [t.id for t in targets] == ["g01.1", "g01.2", "r01"]
 
-    found = [index().find(t) for t in targets]
-    report = retrieval_report({6: found, 4: found}, current_size=6, judge_k=1)
-    assert "| 6 (config) |" in report and "| a.pdf | 2/3 | 3 |" in report
-    assert "| g01.2 |" in report  # gamma quote, not in the best chunk for a beta claim
+    dense = [index().find(t) for t in targets]
+    hybrid = [index().find(t, "hybrid") for t in targets]
+    report = retrieval_report({(6, "dense"): dense, (6, "hybrid"): hybrid}, current_size=6, judge_k=1)
+    assert "| 6 | dense (today) |" in report
+    assert "| a.pdf | 3 | 2/3 | 2/3 |" in report      # by document: dense, hybrid
+    assert "| 6 | hybrid | 2/3 | – | – | none | not met |" in report  # no gain: the rule is not met
+    assert "| g01.2 | a.pdf | 3 | 3 |" in report     # gamma quote: last chunk for a beta claim
+
+
+def test_an_exact_word_breaks_a_tie_between_chunks_on_the_same_topic():
+    # both chunks are "beta" for the embedder; only one holds the exact figure of the claim
+    text = "beta model trained on data with 400m parameters. beta model trained on other data and logs."
+    doc = Document(doc_id="d", filename="b.pdf", source_type="peer_reviewed_paper", text=text)
+    chunks = FixedSizeChunker(WordTokenizer(), chunk_size=8, overlap_ratio=0.0).chunk([doc])
+    idx = InMemoryIndex([doc], chunks, KeywordEmbedder())
+    target = Target("t", "the beta model has 400m parameters", "b.pdf", "trained on data with 400m parameters.")
+
+    assert idx.find(target, "bm25").rank == 1
+    assert idx.find(target, "hybrid").rank == 1
+    with pytest.raises(ValueError, match="méthode inconnue"):
+        idx.ranking("beta", "b.pdf", "magic")
 
 
 @pytest.mark.parametrize("bad", ["not in the text at all, really", "alpha alpha alpha"])

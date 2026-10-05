@@ -50,8 +50,8 @@ ui-test: ## Type-check and test the web UI
 check-gold: ## Check the gold set: labels, sources, and that every quote is in the corpus (no LLM call)
 	$(PY) -m claimverify.evaluation check-gold
 
-eval-retrieval: ## Does the search bring back each proof? Chunk sizes 256/400/510 compared in memory (no LLM call)
-	$(PY) -m claimverify.evaluation retrieval --chunk-sizes 256 510
+eval-retrieval: ## Does the search bring back each proof? Methods and chunk sizes compared in memory (no LLM call)
+	$(PY) -m claimverify.evaluation retrieval --methods dense bm25 hybrid --chunk-sizes 256 510
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt

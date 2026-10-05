@@ -172,57 +172,76 @@ def retrieval_targets(claims: list[GoldClaim], pairs: list[RetrievalPair]):
     return targets + [Target(p.id, p.claim, p.filename, p.quote) for p in pairs]
 
 
-def retrieval_report(results: dict[int, list], current_size: int, judge_k: int) -> str:
-    """Le rapport en Markdown : rappel à chaque k avec son intervalle, détail
-    par document, citations manquées, et comparaison citation par citation
-    des tailles de chunks avec celle de config.yaml."""
+# Règle fixée AVANT la mesure, pour ne pas choisir le seuil après avoir vu les chiffres :
+# une méthode remplace la recherche actuelle si elle gagne au moins MIN_NET_GAIN citations
+# nettes au k du juge, sans qu'aucun document ne perde de preuves.
+MIN_NET_GAIN = 4
+
+
+def retrieval_report(results: dict[tuple[int, str], list], current_size: int, judge_k: int) -> str:
+    """Le rapport en Markdown. `results` : (taille de chunk, méthode) -> résultats.
+    La référence est la recherche actuelle : taille de config.yaml, méthode dense."""
     from claimverify.retrieval_eval import K_VALUES, paired_changes, recall_at, wilson_interval
 
     def pct(hits: int, n: int) -> str:
         low, high = wilson_interval(hits, n)
         return f"{hits}/{n} ({100 * hits / n:.0f} %, {100 * low:.0f}–{100 * high:.0f})"
 
-    base = results[current_size]
+    reference = (current_size, "dense")
+    base = results[reference]
     n = len(base)
+    files = sorted({f.target.filename for f in base})
     lines = ["# Retrieval: does the search bring back the proof?", "",
              f"{n} quotes (gold set + retrieval set). A quote counts as found at k when the chunk",
              "containing it is among the k best chunks of its document (the search is per document).",
              "In brackets: the 95 % Wilson interval, the honest range for so few items.",
              "This is a lower bound: another chunk may state the same fact in other words (an",
              "abstract repeating a result), which is enough for the judge but not detected here.", "",
-             f"`config.yaml`: chunks of {current_size} tokens, the judge gets k = {judge_k} per document.", ""]
+             f"`config.yaml`: chunks of {current_size} tokens, the judge gets k = {judge_k} per document.",
+             "Methods: `dense` = by meaning (today's search), `bm25` = by exact words,",
+             "`hybrid` = both rankings merged by reciprocal rank fusion.", ""]
 
-    lines += ["## Recall by k and chunk size", "",
-              "| Chunk size | " + " | ".join(f"k = {k}" for k in K_VALUES) + " | partly found at k = 2 |",
-              "|---|" + "---|" * (len(K_VALUES) + 1)]
-    for size, found in sorted(results.items()):
-        mark = " (config)" if size == current_size else ""
-        cells = [pct(recall_at(found, k), n) for k in K_VALUES]
-        lines.append(f"| {size}{mark} | " + " | ".join(cells) + f" | {recall_at(found, 2, partial=True)}/{n} |")
+    lines += ["## Recall by k", "",
+              "| Chunk size | Method | " + " | ".join(f"k = {k}" for k in K_VALUES) + " |",
+              "|---|---|" + "---|" * len(K_VALUES)]
+    for (size, method), found in sorted(results.items()):
+        mark = " (today)" if (size, method) == reference else ""
+        lines.append(f"| {size} | {method}{mark} | " + " | ".join(pct(recall_at(found, k), n) for k in K_VALUES) + " |")
 
-    lines += ["", f"## By document (config, k = {judge_k})", "", "| Document | Found | Chunks in the document |",
-              "|---|---|---|"]
-    for filename in sorted({f.target.filename for f in base}):
-        mine = [f for f in base if f.target.filename == filename]
-        lines.append(f"| {filename} | {recall_at(mine, judge_k)}/{len(mine)} | {mine[0].chunks_in_doc} |")
+    lines += ["", f"## Against today's search, quote by quote (k = {judge_k})", "",
+              f"Rule fixed before measuring: keep a method if it gains at least {MIN_NET_GAIN} quotes net and",
+              "no document loses proofs.", "",
+              "| Chunk size | Method | Found | Gained | Lost | Documents losing proofs | Rule |",
+              "|---|---|---|---|---|---|---|"]
+    for key, found in sorted(results.items()):
+        if key == reference:
+            continue
+        gained, lost = paired_changes(base, found, judge_k)
+        losing = [f.split("-")[0] for f in files
+                  if recall_at([x for x in found if x.target.filename == f], judge_k)
+                  < recall_at([x for x in base if x.target.filename == f], judge_k)]
+        met = len(gained) - len(lost) >= MIN_NET_GAIN and not losing
+        lines.append(f"| {key[0]} | {key[1]} | {recall_at(found, judge_k)}/{n} | {', '.join(gained) or '–'} "
+                     f"| {', '.join(lost) or '–'} | {', '.join(losing) or 'none'} | {'met' if met else 'not met'} |")
 
-    missed = [f for f in base if f.rank is None or f.rank > judge_k]
-    lines += ["", f"## Quotes the judge would not see (config, k = {judge_k})", ""]
-    if not missed:
-        lines.append("None.")
-    else:
-        lines += ["| Id | Document | Rank of its chunk | Claim |", "|---|---|---|---|"]
-        for f in sorted(missed, key=lambda f: (f.rank is None, f.rank or 0)):
-            where = f"{f.rank}" if f.rank else f"split across chunks (a part at rank {f.rank_partial})"
-            lines.append(f"| {f.target.id} | {f.target.filename.split('-')[0]} | {where} | {f.target.claim} |")
+    methods = [m for (size, m) in sorted(results) if size == current_size]
+    lines += ["", f"## By document ({current_size} tokens, k = {judge_k})", "",
+              "| Document | Chunks | " + " | ".join(methods) + " |", "|---|---|" + "---|" * len(methods)]
+    for f in files:
+        mine = {m: [x for x in results[(current_size, m)] if x.target.filename == f] for m in methods}
+        cells = [f"{recall_at(mine[m], judge_k)}/{len(mine[m])}" for m in methods]
+        lines.append(f"| {f} | {mine[methods[0]][0].chunks_in_doc} | " + " | ".join(cells) + " |")
 
-    if len(results) > 1:
-        lines += ["", f"## Chunk sizes compared quote by quote (k = {judge_k}, against {current_size})", "",
-                  "| Chunk size | Gained | Lost |", "|---|---|---|"]
-        for size, found in sorted(results.items()):
-            if size != current_size:
-                gained, lost = paired_changes(base, found, judge_k)
-                lines.append(f"| {size} | {', '.join(gained) or '–'} | {', '.join(lost) or '–'} |")
+    lines += ["", f"## Rank of each quote's chunk ({current_size} tokens; > {judge_k}: the judge does not see it)", "",
+              "| Id | Document | " + " | ".join(methods) + " | Claim |", "|---|---|" + "---|" * len(methods) + "---|"]
+    by_id = {m: {x.target.id: x for x in results[(current_size, m)]} for m in methods}
+
+    def shown(x) -> str:
+        return str(x.rank) if x.rank else f"split ({x.rank_partial})"
+    for x in base:
+        ranks = [shown(by_id[m][x.target.id]) for m in methods]
+        lines.append(f"| {x.target.id} | {x.target.filename.split('-')[0]} | " + " | ".join(ranks)
+                     + f" | {x.target.claim} |")
     return "\n".join(lines) + "\n"
 
 
@@ -243,13 +262,16 @@ def run_retrieval(args) -> None:
     targets = retrieval_targets(claims, pairs)
     chunker_cfg = settings.indexing.chunker
     sizes = sorted(set(args.chunk_sizes or []) | {chunker_cfg.chunk_size})
+    methods = list(dict.fromkeys(["dense", *args.methods]))  # dense : la référence, toujours mesurée
     embedder = build_embedder(settings)
     results = {}
     for size in sizes:
         chunks = FixedSizeChunker(embedder, size, chunker_cfg.overlap_ratio).chunk(documents)
         index = InMemoryIndex(documents, chunks, embedder)
-        results[size] = [index.find(t) for t in targets]
-        print(f"[{size} tokens] {len(chunks)} chunks, {len(targets)} quotes ranked", flush=True)
+        for method in methods:
+            results[(size, method)] = [index.find(t, method) for t in targets]
+        print(f"[{size} tokens] {len(chunks)} chunks, {len(targets)} quotes ranked ({', '.join(methods)})",
+              flush=True)
 
     report = retrieval_report(results, chunker_cfg.chunk_size,
                               settings.answering.verifier.retriever.top_k_per_doc)
@@ -271,6 +293,8 @@ def main():
     retrieval.add_argument("--set", type=Path, default=DEFAULT_RETRIEVAL_SET_PATH)
     retrieval.add_argument("--chunk-sizes", type=int, nargs="*", default=None,
                            help="Tailles de chunks à comparer, en plus de celle de config.yaml (ex. 256 510).")
+    retrieval.add_argument("--methods", nargs="*", default=["dense"], choices=["dense", "bm25", "hybrid"],
+                           help="Méthodes de recherche à comparer à la recherche actuelle (dense).")
     retrieval.add_argument("--out", type=Path, default=Path("eval/results/retrieval.md"))
     add_config_argument(retrieval)
     args = parser.parse_args()

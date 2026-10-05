@@ -28,9 +28,11 @@ import math
 import unicodedata
 from dataclasses import dataclass
 
+from claimverify.components.lexical import Bm25Index, reciprocal_rank_fusion
 from claimverify.contracts import Chunk, Document
 
 K_VALUES = (1, 2, 3, 5)
+METHODS = ("dense", "bm25", "hybrid")
 
 
 @dataclass(frozen=True)
@@ -88,31 +90,51 @@ def chunk_spans(text: str, chunks: list[Chunk]) -> list[tuple[int, int]]:
 # --- La recherche, en mémoire ------------------------------------------------------------
 
 class InMemoryIndex:
-    """Les chunks d'un corpus et leurs vecteurs, classés par document comme le
-    fait search_per_document, mais sans base de données."""
+    """Les chunks d'un corpus, classés par document comme le fait
+    search_per_document, mais sans base de données, selon trois méthodes :
+
+        dense   par le sens : cosinus des embeddings (la recherche actuelle)
+        bm25    par les mots : BM25, poids des mots calculés sur TOUT le corpus
+        hybrid  les deux classements fusionnés par leurs rangs (RRF)"""
 
     def __init__(self, documents: list[Document], chunks: list[Chunk], embedder):
         self.embedder = embedder
         self.texts = {d.filename: d.text for d in documents}
-        self.by_doc: dict[str, list[tuple[Chunk, tuple[int, int], list[float]]]] = {}
-        vectors = embedder.embed_texts([c.text for c in chunks])
+        self.vectors = embedder.embed_texts([c.text for c in chunks])
+        self.bm25 = Bm25Index([c.text for c in chunks])
+        # par document : (indice du chunk dans `chunks`, sa position dans le texte)
+        self.by_doc: dict[str, list[tuple[int, tuple[int, int]]]] = {}
         for d in documents:
-            mine = [(c, v) for c, v in zip(chunks, vectors, strict=True) if c.filename == d.filename]
-            spans = chunk_spans(d.text, [c for c, _ in mine])
-            self.by_doc[d.filename] = [(c, s, v) for (c, v), s in zip(mine, spans, strict=True)]
+            mine = [i for i, c in enumerate(chunks) if c.filename == d.filename]
+            spans = chunk_spans(d.text, [chunks[i] for i in mine])
+            self.by_doc[d.filename] = list(zip(mine, spans, strict=True))
 
-    def ranking(self, claim: str, filename: str) -> list[tuple[tuple[int, int], float]]:
-        """(position, score) de chaque chunk du document, du plus au moins similaire."""
+    def ranking(self, claim: str, filename: str, method: str = "dense") -> list[tuple[tuple[int, int], float]]:
+        """(position, score) de chaque chunk du document, du meilleur au moins bon."""
+        if method not in METHODS:
+            raise ValueError(f"méthode inconnue {method!r} (disponibles : {METHODS})")
+        items = self.by_doc[filename]
         query = self.embedder.embed_query(claim)
-        scored = [(span, sum(a * b for a, b in zip(query, vector, strict=True)))
-                  for _, span, vector in self.by_doc[filename]]
-        return sorted(scored, key=lambda item: item[1], reverse=True)
+        dense = {i: sum(a * b for a, b in zip(query, self.vectors[i], strict=True)) for i, _ in items}
+        lexical = self.bm25.scores(claim)
+        words = {i: lexical[i] for i, _ in items}
+        span = dict(items)
 
-    def find(self, target: Target) -> Found:
+        def by_score(scores: dict[int, float]) -> list[int]:
+            return sorted(scores, key=lambda i: scores[i], reverse=True)
+
+        if method == "dense":
+            return [(span[i], dense[i]) for i in by_score(dense)]
+        if method == "bm25":
+            return [(span[i], words[i]) for i in by_score(words)]
+        fused = reciprocal_rank_fusion([by_score(dense), by_score(words)])
+        return [(span[i], dense[i]) for i in fused]  # score affiché : le cosinus, pour comparer
+
+    def find(self, target: Target, method: str = "dense") -> Found:
         quotes = quote_spans(self.texts[target.filename], target.quote)
         if not quotes:
             raise ValueError(f"{target.id} : citation introuvable dans {target.filename}")
-        ranking = self.ranking(target.claim, target.filename)
+        ranking = self.ranking(target.claim, target.filename, method)
         rank = rank_partial = score = None
         for r, ((start, end), s) in enumerate(ranking, start=1):
             if rank_partial is None and any(start < q_end and q_start < end for q_start, q_end in quotes):
