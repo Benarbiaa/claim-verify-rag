@@ -19,8 +19,8 @@ why. This run is the UI's test fixture, labelled "test data": real passages from
 hand-written judge answers passed through the real verification code, so that all five verdicts
 appear, including a `contested` claim on which LumberChunker and Vectara disagree.*
 
-> Built as a technical project for a PFE (final-year internship) application, targeting AI
-> engineering roles (agentic systems, RAG, data engineering).
+> A personal project, built to learn RAG by building one, and to support my applications for a
+> final-year internship (PFE) in AI engineering (agentic systems, RAG, data engineering).
 
 ## Results
 
