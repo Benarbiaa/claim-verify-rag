@@ -20,6 +20,7 @@ aucun appel LLM, donc on peut se permettre plus d'exemples.
 Usage :
     python -m claimverify.evaluation check-gold         (aucun appel LLM, aucune base)
     python -m claimverify.evaluation retrieval          (aucun appel LLM ; GPU pour l'embedding)
+    python -m claimverify.evaluation judge              (APPELS LLM : le juge sur le gold set)
 """
 
 import argparse
@@ -286,7 +287,63 @@ def run_retrieval(args) -> None:
     print("\n" + report + f"\nÉcrit dans {args.out}")
 
 
+def run_judge(args) -> None:
+    """Le vérificateur de config.yaml sur chaque claim du gold set (APPELS LLM).
+    Chaque verdict est écrit dès qu'il arrive : un arrêt (limite journalière)
+    ne perd pas ce qui est déjà payé, et --resume reprend sans le repayer."""
+    import psycopg2
+
+    from claimverify.contracts import Claim, Verdict
+    from claimverify.factory import build_embedder, build_verifier
+    from claimverify.judge_eval import report, score
+    from claimverify.llm import LLMCallError, UsageMeter
+    from claimverify.settings import load_settings
+
+    settings = load_settings(args.config)
+    gold = load_gold(args.gold)
+    problems = check_gold(gold, corpus_texts(settings))
+    if problems:
+        sys.exit("Gold set invalide :\n  - " + "\n  - ".join(problems))
+
+    verdicts: dict[str, Verdict] = {}
+    if args.resume and args.verdicts.exists():
+        verdicts = {v.claim_id: v for v in _load_jsonl(args.verdicts, Verdict)}
+    todo = [Claim(id=g.id, claim=g.claim) for g in gold if g.id not in verdicts]
+    print(f"{len(verdicts)} verdicts already saved, {len(todo)} to obtain from the judge", flush=True)
+
+    meter = UsageMeter()
+    conn = psycopg2.connect(args.db_url)
+    args.verdicts.parent.mkdir(parents=True, exist_ok=True)
+    stopped = None
+    try:
+        verifier = build_verifier(settings, build_embedder(settings), conn, meter)
+        with args.verdicts.open("a" if args.resume else "w", encoding="utf-8") as out:
+            for v in verifier.verify(todo):
+                verdicts[v.claim_id] = v
+                out.write(v.model_dump_json() + "\n")
+                out.flush()
+                u = meter.take()
+                print(f"[{len(verdicts)}/{len(gold)}] {v.claim_id}: {v.verdict} "
+                      f"({u.tokens_in + u.tokens_out} tokens, waited {u.waited_seconds:.0f}s)", flush=True)
+    except LLMCallError as e:
+        stopped = str(e)
+        print(f"Stopped: {stopped}", flush=True)
+    finally:
+        conn.close()
+
+    totals = meter.totals_by_role().get("verify")
+    note = (f"This run: {totals.calls} judge calls, {totals.tokens_in + totals.tokens_out} tokens, "
+            f"{totals.waited_seconds:.0f} s of rate-limit waits." if totals else "")
+    if stopped:
+        note += f" **Stopped early: {stopped}** (resume with --resume)."
+    judge = settings.answering.verifier.judge.model
+    text = report(score(gold, verdicts), judge, note)
+    args.out.write_text(text, encoding="utf-8")
+    print("\n" + text + f"\nÉcrit dans {args.out} (verdicts : {args.verdicts})")
+
+
 def main():
+    from claimverify.config import add_db_url_argument
     from claimverify.settings import add_config_argument, load_settings
 
     parser = argparse.ArgumentParser()
@@ -303,8 +360,18 @@ def main():
                            help="Méthodes de recherche à comparer à la recherche actuelle (dense).")
     retrieval.add_argument("--out", type=Path, default=Path("eval/results/retrieval.md"))
     add_config_argument(retrieval)
+    judge = commands.add_parser("judge", help="Le vérificateur sur le gold set (APPELS LLM : coûte du quota).")
+    judge.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
+    judge.add_argument("--verdicts", type=Path, default=Path("eval/results/judge_verdicts.jsonl"))
+    judge.add_argument("--out", type=Path, default=Path("eval/results/judge.md"))
+    judge.add_argument("--resume", action="store_true", help="Garde les verdicts déjà écrits, demande les autres.")
+    add_config_argument(judge)
+    add_db_url_argument(judge)
     args = parser.parse_args()
 
+    if args.command == "judge":
+        run_judge(args)
+        return
     if args.command == "retrieval":
         run_retrieval(args)
         return

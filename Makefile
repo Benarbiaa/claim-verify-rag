@@ -5,7 +5,7 @@ PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
 
 .DEFAULT_GOAL := help
-.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval
+.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval eval-judge
 
 help: ## List the commands
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  make %-14s %s\n", $$1, $$2}'
@@ -52,6 +52,9 @@ check-gold: ## Check the gold set: labels, sources, and that every quote is in t
 
 eval-retrieval: ## Does the search bring back each proof? Methods and chunk sizes compared in memory (no LLM call)
 	$(PY) -m claimverify.evaluation retrieval --methods dense bm25 hybrid rerank --chunk-sizes 256 510
+
+eval-judge: ## The judge on the 10 gold claims (calls the LLM APIs, about 40K tokens; RESUME=1 continues a stopped run)
+	$(PY) -m claimverify.evaluation judge $(if $(RESUME),--resume)
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt
