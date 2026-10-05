@@ -139,6 +139,7 @@ def test_pgvector_retriever_searches_with_the_embedders_query_vector():
 
 @pytest.mark.parametrize(("extra_args", "k"), [([], 2), (["--top_k_per_doc", "4"], 4)])
 def test_query_check_shows_what_the_drafter_retrieves(monkeypatch, capsys, extra_args, k):
+    from claimverify import factory
     from claimverify.answering import query_check
 
     class ClosableConnection(FakeConnection):
@@ -148,6 +149,8 @@ def test_query_check_shows_what_the_drafter_retrieves(monkeypatch, capsys, extra
     conn = ClosableConnection()
     monkeypatch.setattr(query_check.psycopg2, "connect", lambda url: conn)
     monkeypatch.setattr(query_check, "build_embedder", lambda settings: FakeEmbedder())
+    # config.yaml enables the reranker: a fake one, so no model is downloaded or run on a GPU
+    monkeypatch.setattr(factory, "_reranker", lambda model, device: LongestTextReranker())
     monkeypatch.setattr("sys.argv", ["query_check", "--db_url", "fake", "--query", "Q?", "--per_document",
                                      *extra_args])
     query_check.main()
