@@ -29,10 +29,12 @@ import unicodedata
 from dataclasses import dataclass
 
 from claimverify.components.lexical import Bm25Index, reciprocal_rank_fusion
+from claimverify.components.reranking import Reranker, rerank
 from claimverify.contracts import Chunk, Document
 
 K_VALUES = (1, 2, 3, 5)
-METHODS = ("dense", "bm25", "hybrid")
+METHODS = ("dense", "bm25", "hybrid", "rerank")
+RERANK_CANDIDATES = 10  # candidats par document relus par le reranker
 
 
 @dataclass(frozen=True)
@@ -95,10 +97,15 @@ class InMemoryIndex:
 
         dense   par le sens : cosinus des embeddings (la recherche actuelle)
         bm25    par les mots : BM25, poids des mots calculés sur TOUT le corpus
-        hybrid  les deux classements fusionnés par leurs rangs (RRF)"""
+        hybrid  les deux classements fusionnés par leurs rangs (RRF)
+        rerank  hybrid, puis les RERANK_CANDIDATES premiers re-triés par un
+                cross-encodeur qui lit le claim et chaque chunk ensemble"""
 
-    def __init__(self, documents: list[Document], chunks: list[Chunk], embedder):
+    def __init__(self, documents: list[Document], chunks: list[Chunk], embedder,
+                 reranker: Reranker | None = None, candidates: int = RERANK_CANDIDATES):
         self.embedder = embedder
+        self.reranker, self.candidates = reranker, candidates
+        self.chunk_texts = [c.text for c in chunks]
         self.texts = {d.filename: d.text for d in documents}
         self.vectors = embedder.embed_texts([c.text for c in chunks])
         self.bm25 = Bm25Index([c.text for c in chunks])
@@ -128,6 +135,11 @@ class InMemoryIndex:
         if method == "bm25":
             return [(span[i], words[i]) for i in by_score(words)]
         fused = reciprocal_rank_fusion([by_score(dense), by_score(words)])
+        if method == "rerank":
+            if self.reranker is None:
+                raise ValueError("la méthode 'rerank' demande un reranker")
+            head = rerank(claim, fused[:self.candidates], self.chunk_texts, self.reranker)
+            fused = head + fused[self.candidates:]
         return [(span[i], dense[i]) for i in fused]  # score affiché : le cosinus, pour comparer
 
     def find(self, target: Target, method: str = "dense") -> Found:

@@ -51,7 +51,7 @@ check-gold: ## Check the gold set: labels, sources, and that every quote is in t
 	$(PY) -m claimverify.evaluation check-gold
 
 eval-retrieval: ## Does the search bring back each proof? Methods and chunk sizes compared in memory (no LLM call)
-	$(PY) -m claimverify.evaluation retrieval --methods dense bm25 hybrid --chunk-sizes 256 510
+	$(PY) -m claimverify.evaluation retrieval --methods dense bm25 hybrid rerank --chunk-sizes 256 510
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt

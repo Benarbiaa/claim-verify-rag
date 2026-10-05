@@ -199,7 +199,9 @@ def retrieval_report(results: dict[tuple[int, str], list], current_size: int, ju
              "abstract repeating a result), which is enough for the judge but not detected here.", "",
              f"`config.yaml`: chunks of {current_size} tokens, the judge gets k = {judge_k} per document.",
              "Methods: `dense` = by meaning (today's search), `bm25` = by exact words,",
-             "`hybrid` = both rankings merged by reciprocal rank fusion.", ""]
+             "`hybrid` = both rankings merged by reciprocal rank fusion,",
+             "`rerank` = hybrid, then its 10 best chunks per document re-sorted by a cross-encoder",
+             "(`BAAI/bge-reranker-base`) that reads the claim and each chunk together.", ""]
 
     lines += ["## Recall by k", "",
               "| Chunk size | Method | " + " | ".join(f"k = {k}" for k in K_VALUES) + " |",
@@ -264,10 +266,14 @@ def run_retrieval(args) -> None:
     sizes = sorted(set(args.chunk_sizes or []) | {chunker_cfg.chunk_size})
     methods = list(dict.fromkeys(["dense", *args.methods]))  # dense : la référence, toujours mesurée
     embedder = build_embedder(settings)
+    reranker = None
+    if "rerank" in methods:
+        from claimverify.components.reranking import CrossEncoderReranker
+        reranker = CrossEncoderReranker(device=settings.embedding.device)
     results = {}
     for size in sizes:
         chunks = FixedSizeChunker(embedder, size, chunker_cfg.overlap_ratio).chunk(documents)
-        index = InMemoryIndex(documents, chunks, embedder)
+        index = InMemoryIndex(documents, chunks, embedder, reranker)
         for method in methods:
             results[(size, method)] = [index.find(t, method) for t in targets]
         print(f"[{size} tokens] {len(chunks)} chunks, {len(targets)} quotes ranked ({', '.join(methods)})",
@@ -293,7 +299,7 @@ def main():
     retrieval.add_argument("--set", type=Path, default=DEFAULT_RETRIEVAL_SET_PATH)
     retrieval.add_argument("--chunk-sizes", type=int, nargs="*", default=None,
                            help="Tailles de chunks à comparer, en plus de celle de config.yaml (ex. 256 510).")
-    retrieval.add_argument("--methods", nargs="*", default=["dense"], choices=["dense", "bm25", "hybrid"],
+    retrieval.add_argument("--methods", nargs="*", default=["dense"], choices=["dense", "bm25", "hybrid", "rerank"],
                            help="Méthodes de recherche à comparer à la recherche actuelle (dense).")
     retrieval.add_argument("--out", type=Path, default=Path("eval/results/retrieval.md"))
     add_config_argument(retrieval)
