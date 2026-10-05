@@ -100,7 +100,13 @@ them before building the eval baseline**, or the numbers you report will be skew
   median 3,900 to 5,650 tokens (max 6,241) against Qwen's 7,000 input tokens per minute.
 - [ ] The conflict claims (g05, g06) still see one side at most: abstract claims with no
   distinctive term. Candidate fix: the agentic verifier (reformulate and search again).
-- [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
+- [x] Judge evaluation (`make eval-judge`, LLM calls): the verifier of `config.yaml` on the 10 gold
+  claims, with the cause of each wrong verdict (proof not read = retrieval; proof read = judge).
+  First run (qwen3.8-27b, hybrid + rerank, k = 2): **9/10 correct**, no false contradiction,
+  no `error`; 41K tokens, 232 s of rate-limit waits. The miss (g05, contested → supported):
+  Vectara's own introduction says chunking has "a crucial effect", its conclusion that the effect
+  is overshadowed; the judge read the introduction. Label to review. Results: `eval/results/judge.md`.
+- [ ] (superseded by `make eval-judge`) Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
 - [ ] Ablations, one table each: global vs. per-document retrieval · `top_k_per_doc` 2/3/4 ·
