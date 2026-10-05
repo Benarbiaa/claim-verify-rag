@@ -88,7 +88,12 @@ them before building the eval baseline**, or the numbers you report will be skew
   in `config.yaml`): checked identical to the measured hybrid search on all 40 claims, so the
   judge now receives the proof for 31/44 quotes (23 before). `experiments/smoke_k1.yaml` keeps
   `pgvector`: it documents the recorded run.
-- [ ] Next retrieval step: a reranker (cross-encoder) over the candidates of both searches.
+- [x] Reranker measured (`components/reranking.py`, `BAAI/bge-reranker-base`, local): hybrid's 10
+  best chunks per document re-sorted by a cross-encoder. 400 tokens, k = 2: **37/44** (+14 vs
+  dense, nothing lost; hybrid 31, BM25 38); k = 1: 29/44 (hybrid 16). Lewis 9/10. Rule met.
+  Cost: about 2.6 s per claim on GPU (40 candidates) and a 1.1 GB model. The two conflict
+  claims still rank their sides 3rd/4th: abstract claims with no distinctive term.
+- [ ] Decide: adopt the reranker in the pipeline (a `RerankingRetriever` around the hybrid one).
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
