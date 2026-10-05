@@ -12,6 +12,13 @@ against: **supported**, **contradicted**, **contested** (the sources disagree wi
 Most student RAG demos trust the retrieved chunks blindly. This one treats its own answer as a
 set of falsifiable claims, and it can catch cases where two sources in the corpus disagree.
 
+![The fact-check view: each claim of the answer (rows) against each source (columns)](docs/images/fact-check.png)
+
+*The fact-check view: each claim of the answer (rows) checked against each source (columns), and
+why. This run is the UI's test fixture, labelled "test data": real passages from the corpus,
+hand-written judge answers passed through the real verification code, so that all five verdicts
+appear, including a `contested` claim on which LumberChunker and Vectara disagree.*
+
 > Built as a technical project for a PFE (final-year internship) application, targeting AI
 > engineering roles (agentic systems, RAG, data engineering).
 
@@ -195,6 +202,8 @@ make ui LIVE=1                             # same, and "Ask a question" can star
 
 By hand: `cd ui && npm install && npm run build`, then `python -m claimverify.api.server`
 (live runs allowed unless `--no-live`).
+
+![The indexing view: load, clean, cut, embed, store, and the repairs made to each PDF](docs/images/indexing.png)
 
 | Option | Effect |
 |---|---|
