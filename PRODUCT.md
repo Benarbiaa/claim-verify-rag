@@ -22,7 +22,7 @@ accessible primitives, Motion for animation, TanStack Query for data, EventSourc
 
 ## Product Purpose
 
-claim-verify-rag is an agentic RAG pipeline: it drafts an answer from a corpus, splits the answer
+claim-verify-rag is a RAG pipeline: it drafts an answer from a corpus, splits the answer
 into atomic claims, and re-verifies each claim against every source with a judge from a different
 model family. The UI makes that PROCESS visible: each stage, its intermediate results, and the
 final verdicts. Success: a visitor can say, after one viewing, "it wrote an answer, then checked

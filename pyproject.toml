@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "claimverify"
 version = "0.1.0"
-description = "Agentic RAG that decomposes its own answers into atomic claims and fact-checks each one against the full corpus."
+description = "A RAG pipeline that decomposes its own answers into atomic claims and fact-checks each one against the full corpus."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Emir Benarbia" }]

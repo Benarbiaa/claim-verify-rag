@@ -72,8 +72,12 @@ Tests **end to end**: 20 to 30 questions, each annotated with the verdict patter
 (for example "must surface at least one conflict naming both chunking papers"). Run with
 `make batch`. `smoke_questions.txt` is the starting point.
 
-## Planned runner
+## Running the evaluations
 
-`scripts/run_eval.py` (to write): loads `claims_gold.jsonl`, invokes `build_graph()` directly,
-scores against `expected`, and writes its results in a run folder under `runs/`. Also useful for ablations:
-per-document vs. global retrieval, `top_k_per_doc` 2 vs. 3, and different LLMs.
+| Command | What it does | LLM calls |
+|---|---|---|
+| `make check-gold` | checks both sets: labels, sources, every quote in the stored text | none |
+| `make eval-retrieval` | ranks every chunk of each quote's document; recall at k for every method and chunk size | none |
+| `make eval-judge` | the verifier of `config.yaml` on the 10 gold claims; each wrong verdict is blamed on retrieval (proof not read) or on the judge | about 40K tokens (`RESUME=1` continues a stopped run) |
+
+Results are written to [`results/`](results/) and committed with the code that produced them.

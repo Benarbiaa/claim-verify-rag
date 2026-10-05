@@ -4,7 +4,7 @@ Vérification de retrieval — sanity check avant d'attaquer l'agent LangGraph
 
 Interroge la base pgvector avec quelques questions de test et affiche les
 chunks les plus proches, pour vérifier manuellement que le retrieval a du
-sens avant de construire la couche agentique par-dessus.
+sens avant de construire la vérification par-dessus.
 
 Usage (--db_url facultatif si DB_URL est dans .env, voir config.py) :
     python -m claimverify.answering.query_check
