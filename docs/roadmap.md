@@ -79,8 +79,12 @@ them before building the eval baseline**, or the numbers you report will be skew
   Lewis 3/10. Neither side of the two conflict claims (g05, g06) is in the judge's passages.
   Chunk size (256 / 510) changes little (+1 to +3, within noise); k matters more (k = 5: 31/44).
   Reference-list chunks never take a slot. Results: `eval/results/retrieval.md`.
-- [ ] Improve retrieval, measured with the same tool at no LLM cost: many missed proofs hold
-  exact figures or names (7.37 %, 400M, FAISS, 21M) that lexical search (BM25) matches well.
+- [x] Lexical and hybrid search measured (`components/lexical.py`: BM25 + reciprocal rank fusion),
+  400 tokens, k = 2: dense 23/44, **hybrid 31/44** (+8, nothing lost), **BM25 alone 38/44**
+  (+16, 1 lost). Both pass the rule fixed beforehand (+4 net, no document losing proofs).
+  BM25 wins on these claims because they name exact figures and terms; it cannot match a
+  paraphrase with no shared word, a case this set barely contains. Decision pending.
+- [ ] Next retrieval step: a reranker (cross-encoder) over the candidates of both searches.
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
