@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from claimverify.answering.decomposition import LLMDecomposer
 from claimverify.answering.drafting import LLMDrafter
-from claimverify.answering.retrieval import HybridRetriever
+from claimverify.answering.retrieval import HybridRetriever, RerankingRetriever
 from claimverify.answering.verification import LangGraphVerifier, LLMJudge
 from claimverify.components.embedding import BgeEmbedder
 from claimverify.factory import build_answering, build_indexing
@@ -109,8 +109,13 @@ def test_cleaning_can_be_turned_off_for_comparison(settings):
 
 def test_build_answering(settings):
     stages = build_answering(settings, conn=None)
-    assert isinstance(stages.retriever, HybridRetriever)
-    assert isinstance(stages.verifier.retriever, HybridRetriever)
+    for retriever in (stages.retriever, stages.verifier.retriever):
+        assert isinstance(retriever, RerankingRetriever)
+        assert isinstance(retriever.base, HybridRetriever)
+        # the search brings 10 candidates per document, the reranker keeps 2
+        assert (retriever.base.top_k_per_doc, retriever.top_k_per_doc) == (10, 2)
+    # one model shared by the drafter's and the judge's retrievers
+    assert stages.retriever.reranker is stages.verifier.retriever.reranker
     assert isinstance(stages.drafter, LLMDrafter)
     assert isinstance(stages.decomposer, LLMDecomposer)
     assert isinstance(stages.verifier, LangGraphVerifier)
@@ -122,7 +127,21 @@ def test_build_answering(settings):
 
 def test_every_retriever_shares_one_embedder(settings):
     stages = build_answering(settings, conn=None)
-    assert stages.retriever.embedder is stages.verifier.retriever.embedder
+    assert stages.retriever.base.embedder is stages.verifier.retriever.base.embedder
+
+
+def test_without_rerank_the_search_is_used_directly(settings):
+    cfg = settings.model_copy(deep=True)
+    cfg.answering.verifier.retriever.rerank = None
+    retriever = build_answering(cfg, conn=None).verifier.retriever
+    assert isinstance(retriever, HybridRetriever) and retriever.top_k_per_doc == 2
+
+
+def test_fewer_candidates_than_kept_passages_is_refused():
+    cfg = raw_config()
+    cfg["answering"]["verifier"]["retriever"]["rerank"]["candidates"] = 1
+    with pytest.raises(ValidationError, match="doit être >= top_k_per_doc"):
+        Settings.model_validate(cfg)
 
 
 def test_a_config_change_swaps_the_judge_without_code_changes(settings, monkeypatch):

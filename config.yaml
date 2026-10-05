@@ -38,6 +38,10 @@ answering:
   retriever:                     # used by the drafter
     type: hybrid                 # pgvector: by meaning only; hybrid: meaning + exact words (BM25)
     top_k_per_doc: 2
+    rerank:                      # optional: a cross-encoder rereads the candidates (local model)
+      model: BAAI/bge-reranker-base
+      candidates: 10             # passages per document reread; the best top_k_per_doc are kept
+      device: cuda
   drafter:
     type: llm
     provider: groq
@@ -49,8 +53,12 @@ answering:
   verifier:
     type: langgraph
     retriever:                   # its own retriever: can differ from the drafter's
-      type: hybrid               # make eval-retrieval: the proof is seen for 31/44 quotes, 23 with pgvector
+      type: hybrid               # make eval-retrieval, proof seen: pgvector 23/44, hybrid 31, + rerank 37
       top_k_per_doc: 2
+      rerank:
+        model: BAAI/bge-reranker-base
+        candidates: 10
+        device: cuda
     judge:                       # a different model family from the drafter, on purpose
       type: llm
       provider: groq

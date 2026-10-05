@@ -12,10 +12,11 @@ d'embedding n'est chargé qu'au premier usage (BgeEmbedder).
 
 import os
 from dataclasses import dataclass, field
+from functools import cache
 
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
-from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, Retriever
+from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, RerankingRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.indexing.chunking import Chunker, FixedSizeChunker, Tokenizer
@@ -102,7 +103,20 @@ def build_chunker(settings: Settings, tokenizer: Tokenizer) -> Chunker:
 
 
 def build_retriever(cfg: RetrieverSettings, embedder: Embedder, conn, stage: str) -> Retriever:
-    return _pick(RETRIEVERS, cfg.type, stage)(cfg, embedder, conn)
+    if cfg.rerank is None:
+        return _pick(RETRIEVERS, cfg.type, stage)(cfg, embedder, conn)
+    # La recherche ramène `candidates` passages par document ; le reranker en garde top_k_per_doc.
+    base = _pick(RETRIEVERS, cfg.type, stage)(
+        cfg.model_copy(update={"top_k_per_doc": cfg.rerank.candidates}), embedder, conn)
+    return RerankingRetriever(base, _reranker(cfg.rerank.model, cfg.rerank.device), cfg.top_k_per_doc)
+
+
+@cache
+def _reranker(model: str, device: str):
+    # Un seul modèle chargé par processus, partagé par les retrievers du drafter et du juge
+    # (et par les runs successifs de l'interface). Chargé au premier usage seulement.
+    from claimverify.components.reranking import CrossEncoderReranker
+    return CrossEncoderReranker(model, device)
 
 
 def build_drafter(settings: Settings, meter: UsageMeter | None = None) -> Drafter:

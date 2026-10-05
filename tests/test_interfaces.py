@@ -9,7 +9,7 @@ import pytest
 
 from claimverify.answering.decomposition import Decomposer, LLMDecomposer
 from claimverify.answering.drafting import Drafter, LLMDrafter
-from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, Retriever
+from claimverify.answering.retrieval import HybridRetriever, PgvectorRetriever, RerankingRetriever, Retriever
 from claimverify.answering.verification import Judge, LangGraphVerifier, LLMJudge, Verifier
 from claimverify.components.embedding import BgeEmbedder, Embedder
 from claimverify.contracts import Claim, Document, Draft, Passage, Verdict
@@ -162,6 +162,22 @@ def test_hybrid_retriever_brings_up_a_chunk_that_only_the_exact_words_point_to()
     # by meaning alone: chunks 0 and 1; the exact terms lift chunk 2 (3rd by meaning) into the top 2
     assert sorted(p.chunk_index for p in passages) == [0, 2]
     assert [p.score for p in passages] == sorted((p.score for p in passages), reverse=True)
+
+
+class LongestTextReranker:
+    """Fake cross-encoder: prefers the longest passage."""
+
+    def scores(self, query, texts):
+        return [float(len(t)) for t in texts]
+
+
+def test_reranking_retriever_keeps_the_passages_the_reranker_prefers_in_each_document():
+    base = HybridRetriever(FakeEmbedder(), FakeConnection(), top_k_per_doc=5)
+    retriever = RerankingRetriever(base, LongestTextReranker(), top_k_per_doc=2)
+    assert isinstance(retriever, Retriever)
+    passages = retriever.retrieve("anything")
+    # the two longest of the 5 candidates, whatever their rank by the search
+    assert sorted(p.text for p in passages) == sorted(HYBRID_CHUNKS, key=len)[-2:]
 
 
 def test_hybrid_retriever_reads_the_chunk_texts_once():

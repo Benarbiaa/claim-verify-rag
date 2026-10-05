@@ -9,6 +9,9 @@ reçoit tous les deux : il ne crée ni modèle ni connexion.
 Deux implémentations, choisies dans config.yaml (type) :
     pgvector  par le sens seulement (embeddings)
     hybrid    par le sens ET par les mots (BM25), classements fusionnés
+et, en option (rerank), un RerankingRetriever qui enveloppe l'une ou l'autre :
+il lui demande plus de candidats par document, puis les fait relire par un
+cross-encodeur et garde les meilleurs.
 """
 
 from functools import cached_property
@@ -16,6 +19,7 @@ from typing import Protocol, runtime_checkable
 
 from claimverify.components.embedding import Embedder
 from claimverify.components.lexical import Bm25Index, reciprocal_rank_fusion
+from claimverify.components.reranking import Reranker
 from claimverify.components.store import (
     TOP_K_PER_DOC,
     load_chunk_texts,
@@ -83,6 +87,37 @@ class HybridRetriever:
             results += [chosen[i] for i in best]  # le score affiché reste le cosinus
 
         results.sort(key=lambda p: p.score, reverse=True)
+        return results
+
+
+class RerankingRetriever:
+    """Enveloppe un retriever : ses `candidates` meilleurs passages par document
+    sont relus par un cross-encodeur (le claim et le passage ENSEMBLE), qui
+    garde les `top_k_per_doc` qui répondent le mieux.
+
+    La recherche trouve la preuve parmi ses candidats sans bien la classer
+    (scores d'embedding serrés dans un même article) ; le reranker la classe.
+    Mesuré sur 44 citations (make eval-retrieval) : la preuve est dans les 2
+    premiers passages de son document pour 37/44 avec hybrid + reranker,
+    31/44 avec hybrid seul, 23/44 par le sens seul."""
+
+    def __init__(self, base: Retriever, reranker: Reranker, top_k_per_doc: int = TOP_K_PER_DOC):
+        self.base = base          # construit pour ramener `candidates` passages par document
+        self.reranker = reranker
+        self.top_k_per_doc = top_k_per_doc
+
+    def retrieve(self, query: str) -> list[Passage]:
+        by_doc: dict[str, list[Passage]] = {}
+        for p in self.base.retrieve(query):
+            by_doc.setdefault(p.filename, []).append(p)
+
+        results = []
+        for passages in by_doc.values():
+            scores = self.reranker.scores(query, [p.text for p in passages])
+            order = sorted(range(len(passages)), key=lambda j: scores[j], reverse=True)
+            results += [passages[j] for j in order[:self.top_k_per_doc]]
+
+        results.sort(key=lambda p: p.score, reverse=True)  # le score affiché reste le cosinus
         return results
 
 

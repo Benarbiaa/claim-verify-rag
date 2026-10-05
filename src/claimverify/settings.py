@@ -80,9 +80,23 @@ class ChunkerSettings(_Strict):
     overlap_ratio: float = Field(ge=0, lt=1)
 
 
+class RerankSettings(_Strict):
+    model: str
+    candidates: PositiveInt = 10   # passages par document relus par le reranker
+    device: str = "cuda"
+
+
 class RetrieverSettings(_Strict):
     type: Literal["pgvector", "hybrid"]  # par le sens seulement, ou sens + mots exacts (BM25)
     top_k_per_doc: PositiveInt
+    rerank: RerankSettings | None = None  # absent : pas de reranker
+
+    @model_validator(mode="after")
+    def _enough_candidates(self) -> "RetrieverSettings":
+        if self.rerank and self.rerank.candidates < self.top_k_per_doc:
+            raise ValueError(f"rerank.candidates ({self.rerank.candidates}) doit être >= "
+                             f"top_k_per_doc ({self.top_k_per_doc})")
+        return self
 
 
 class VerifierSettings(_Strict):

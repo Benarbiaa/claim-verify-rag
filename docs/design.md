@@ -53,7 +53,7 @@ flowchart TB
 | Cleaner | minimal repair of PDF extraction: page numbers, NFKC, words split at line ends | none | local |
 | Chunker | fixed windows of 400 tokens **of the embedder**, 15% overlap, cut between words | the embedder's tokenizer | local |
 | Embedder | `BAAI/bge-base-en-v1.5`, 768 dimensions | embedding model | your GPU (CPU works) |
-| Retriever | **hybrid**: by meaning (pgvector) and by exact words (BM25), rankings fused; top-k **per document** | the shared embedder + BM25 | GPU + Postgres |
+| Retriever | **hybrid**: by meaning (pgvector) and by exact words (BM25), rankings fused; then the 10 best per document **reranked** by a cross-encoder; top-k **per document** | the shared embedder + BM25 + `BAAI/bge-reranker-base` | GPU + Postgres |
 | Drafter | LLM with a grounded, cited prompt | `openai/gpt-oss-120b` | Groq API |
 | Decomposer | LLM in JSON mode | `openai/gpt-oss-120b` | Groq API |
 | Judge | LLM in JSON mode | `qwen/qwen3.8-27b` | Groq API |
@@ -232,6 +232,7 @@ classDiagram
     Embedder <|.. BgeEmbedder
     Retriever <|.. PgvectorRetriever
     Retriever <|.. HybridRetriever
+    Retriever <|.. RerankingRetriever
     Drafter <|.. LLMDrafter
     Decomposer <|.. LLMDecomposer
     Judge <|.. LLMJudge
@@ -239,6 +240,7 @@ classDiagram
 
     PgvectorRetriever o-- Embedder : receives
     HybridRetriever o-- Embedder : receives
+    RerankingRetriever o-- Retriever : wraps
     FixedSizeChunker o-- BgeEmbedder : counts tokens with
     LangGraphVerifier o-- Retriever : receives
     LangGraphVerifier o-- Judge : receives
@@ -289,11 +291,12 @@ embedding:   type: bge           model · device                        ← shar
 indexing:    loader              type: files
              cleaner             type: minimal | none
              chunker             type: fixed_size · chunk_size (embedder tokens, ≤ 510) · overlap_ratio
-answering:   retriever           type: hybrid | pgvector · top_k_per_doc ← used by the drafter
+answering:   retriever           type: hybrid | pgvector · top_k_per_doc · rerank? ← used by the drafter
              drafter             type: llm · provider · model
              decomposer          type: llm · provider · model
              verifier            type: langgraph
-               retriever         type: hybrid | pgvector · top_k_per_doc ← its own retriever
+               retriever         type: hybrid | pgvector · top_k_per_doc · rerank? ← its own retriever
+                 rerank          model · candidates · device             ← optional, wraps the search
                judge             type: llm · provider · model
 ```
 
@@ -305,7 +308,7 @@ answering:   retriever           type: hybrid | pgvector · top_k_per_doc ← us
 | cleaner | `minimal` → `MinimalCleaner`, `none` → `NoCleaner` |
 | chunker | `fixed_size` → `FixedSizeChunker` |
 | embedding | `bge` → `BgeEmbedder` |
-| retriever | `pgvector` → `PgvectorRetriever`, `hybrid` → `HybridRetriever` |
+| retriever | `pgvector` → `PgvectorRetriever`, `hybrid` → `HybridRetriever`; with `rerank:`, wrapped in a `RerankingRetriever` |
 | drafter / decomposer / judge | `llm` → `LLMDrafter` / `LLMDecomposer` / `LLMJudge` |
 | verifier | `langgraph` → `LangGraphVerifier` |
 
@@ -599,6 +602,7 @@ gave identical results.
 | 15 | **Minimal cleaning** as its own stage, checked by a guarantee | repairs extraction without judging content; works on any future document; measurable (`none` for comparison) | removing references/appendices; classic NLP preprocessing (lowercase, stopwords) |
 | 16 | **Chunks measured in the embedder's tokens**, cut from the original text | the whole chunk is embedded, exactly what the judge reads; case and line breaks kept | words (41% of the text was never embedded); another tokenizer |
 | 17 | **Hybrid retrieval** (meaning + BM25, reciprocal rank fusion) | within one paper all chunks share a topic, so embedding scores are bunched and the exact figure or name that makes the proof barely counts; measured on 44 quotes: proof seen 31/44 vs 23/44, none lost | BM25 alone (38/44, but blind to paraphrases with no shared word); a weighted score sum (a weight tuned on the test set measures nothing) |
+| 18 | **Reranker** (cross-encoder) over the hybrid search's 10 best chunks per document, judge k kept at 2 | the search finds the proof among its candidates but ranks it poorly; a model reading claim and chunk together ranks it: proof seen 37/44 (hybrid 31), at k = 1 29/44 (16), none lost; k = 3 gains 1 quote for +45 % judge prompt (5,650 tokens vs Qwen's 7,000/min) | k = 3; BM25 alone (no paraphrase safety) |
 
 ---
 
@@ -613,6 +617,7 @@ gave identical results.
 | **One shared embedder** | `build_answering` | questions and claims must be embedded like the chunks |
 | **Each provider gets only its own key** | `api_key_env` | the Groq key is never sent to Gemini |
 | **LangGraph step limit raised** | `LangGraphVerifier.verify` | the default (25 steps) crashed answers with more than 12 claims |
+| **One reranker model per process** | `factory._reranker` (cached) | the drafter's and the judge's retrievers, and successive UI runs, share one 1.1 GB model, loaded on first use |
 | **Exact vector search, no index** | `setup_db` | a few ms at this size; an IVFFlat index built on an empty table dropped whole documents from per-document search |
 | **Ingest replaces the whole table, in one transaction** | `replace_chunks` | no leftover rows from a removed or renamed file, or from the old chunking; a failed ingest leaves the old table intact |
 | **Warning on old `.env` model variables** | `load_settings` | ignored variables must not mislead |

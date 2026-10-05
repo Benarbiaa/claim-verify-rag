@@ -93,7 +93,13 @@ them before building the eval baseline**, or the numbers you report will be skew
   dense, nothing lost; hybrid 31, BM25 38); k = 1: 29/44 (hybrid 16). Lewis 9/10. Rule met.
   Cost: about 2.6 s per claim on GPU (40 candidates) and a 1.1 GB model. The two conflict
   claims still rank their sides 3rd/4th: abstract claims with no distinctive term.
-- [ ] Decide: adopt the reranker in the pipeline (a `RerankingRetriever` around the hybrid one).
+- [x] **Reranker adopted** (`RerankingRetriever` around the hybrid search, `rerank:` in
+  `config.yaml`, one model shared per process): checked identical to the measurement on all 40
+  claims; the judge now receives the proof for 37/44 quotes.
+- [x] Judge k = 3 measured and **rejected**: +1 quote (38/44) for a judge prompt growing from a
+  median 3,900 to 5,650 tokens (max 6,241) against Qwen's 7,000 input tokens per minute.
+- [ ] The conflict claims (g05, g06) still see one side at most: abstract claims with no
+  distinctive term. Candidate fix: the agentic verifier (reformulate and search again).
 - [ ] Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
 - [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
