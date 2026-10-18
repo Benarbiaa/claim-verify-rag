@@ -66,6 +66,9 @@ the rank of the chunk that holds the quote. One run gives the recall for every k
 of 256, 400 and 510 tokens, compared quote by quote. Results: [`results/retrieval.md`](results/retrieval.md).
 The recall is a **lower bound**: another chunk may state the same fact in other words.
 
+Ids: `g05` is a gold claim, `r04` a retrieval pair. A gold claim with several quotes gives one
+target per quote, numbered in file order: `g05.1` is g05's first quote, `g05.2` its second.
+
 ## 2. Question-level set: `questions.jsonl` (to build)
 
 Tests **end to end**: 20 to 30 questions, each annotated with the verdict pattern you expect
@@ -78,6 +81,8 @@ Tests **end to end**: 20 to 30 questions, each annotated with the verdict patter
 |---|---|---|
 | `make check-gold` | checks both sets: labels, sources, every quote in the stored text | none |
 | `make eval-retrieval` | ranks every chunk of each quote's document; recall at k for every method and chunk size | none |
+| `make retrieval-details` | for each quote, the k chunks the judge would read and the proof's chunk, quote highlighted, in `runs/` (`METHOD=`, `SIZE=`, `K=`, default `config.yaml`'s) | none |
+| `make chunks SIZE=256` | the corpus cut at that size, every chunk in `runs/` (the database keeps `config.yaml`'s size) | none |
 | `make eval-judge` | the verifier of `config.yaml` on the 10 gold claims; each wrong verdict is blamed on retrieval (proof not read) or on the judge | about 40K tokens (`RESUME=1` continues a stopped run) |
 
 Results are written to [`results/`](results/) and committed with the code that produced them.

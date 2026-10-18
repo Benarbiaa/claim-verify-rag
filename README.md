@@ -166,6 +166,8 @@ Other commands (`make help`):
 | `make db-down` | Stop the database container (data kept) |
 | `make check-gold` | Check the gold set: labels, sources, every quote found in the corpus |
 | `make eval-retrieval` | Does the search bring back each proof? Methods and chunk sizes compared, no LLM calls |
+| `make retrieval-details` | For each of the 44 quotes, the chunks the judge would read and the proof's chunk, in `runs/` (`METHOD=`, `SIZE=`, `K=`), no LLM calls |
+| `make chunks SIZE=256` | Every chunk of the corpus at that size, in `runs/`; the database is not touched |
 | `make eval-judge` | The verifier on the 10 gold claims (calls the LLM APIs, about 40K tokens) |
 | `make requirements` | Regenerate `requirements.txt` from `pyproject.toml` |
 

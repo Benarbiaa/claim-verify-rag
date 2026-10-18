@@ -21,6 +21,8 @@ items are affordable.
 Usage:
     python -m claimverify.evaluation check-gold         (no LLM call, no database)
     python -m claimverify.evaluation retrieval          (no LLM call; GPU for the embedding)
+    python -m claimverify.evaluation retrieval-details  (no LLM call: the chunks the judge would read)
+    python -m claimverify.evaluation chunks --size 256  (no LLM call: the corpus cut at that size)
     python -m claimverify.evaluation judge              (LLM CALLS: the judge on the gold set)
 """
 
@@ -248,10 +250,8 @@ def retrieval_report(results: dict[tuple[int, str], list], current_size: int, ju
     return "\n".join(lines) + "\n"
 
 
-def run_retrieval(args) -> None:
-    from claimverify.factory import build_embedder
-    from claimverify.indexing.chunking import FixedSizeChunker
-    from claimverify.retrieval_eval import InMemoryIndex
+def _retrieval_inputs(args):
+    """Settings, stored documents and the 44 targets, after checking both sets."""
     from claimverify.settings import load_settings
 
     settings = load_settings(args.config)
@@ -261,16 +261,25 @@ def run_retrieval(args) -> None:
     problems = check_gold(claims, texts) + check_retrieval_set(pairs, texts)
     if problems:
         sys.exit("Invalid evaluation sets:\n  - " + "\n  - ".join(problems))
+    return settings, documents, retrieval_targets(claims, pairs)
 
-    targets = retrieval_targets(claims, pairs)
+
+def _reranker(settings):
+    from claimverify.components.reranking import CrossEncoderReranker
+    return CrossEncoderReranker(device=settings.embedding.device)
+
+
+def run_retrieval(args) -> None:
+    from claimverify.factory import build_embedder
+    from claimverify.indexing.chunking import FixedSizeChunker
+    from claimverify.retrieval_eval import InMemoryIndex
+
+    settings, documents, targets = _retrieval_inputs(args)
     chunker_cfg = settings.indexing.chunker
     sizes = sorted(set(args.chunk_sizes or []) | {chunker_cfg.chunk_size})
     methods = list(dict.fromkeys(["dense", *args.methods]))  # dense: the reference, always measured
     embedder = build_embedder(settings)
-    reranker = None
-    if "rerank" in methods:
-        from claimverify.components.reranking import CrossEncoderReranker
-        reranker = CrossEncoderReranker(device=settings.embedding.device)
+    reranker = _reranker(settings) if "rerank" in methods else None
     results = {}
     for size in sizes:
         chunks = FixedSizeChunker(embedder, size, chunker_cfg.overlap_ratio).chunk(documents)
@@ -285,6 +294,45 @@ def run_retrieval(args) -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(report, encoding="utf-8")
     print("\n" + report + f"\nWritten to {args.out}")
+
+
+def run_retrieval_details(args) -> None:
+    """The chunks the judge would read for each quote, for one method and chunk
+    size (by default the verifier's of config.yaml)."""
+    from claimverify.factory import build_embedder
+    from claimverify.indexing.chunking import FixedSizeChunker
+    from claimverify.retrieval_eval import InMemoryIndex, details_report
+
+    settings, documents, targets = _retrieval_inputs(args)
+    retriever = settings.answering.verifier.retriever
+    method = args.method or ("rerank" if retriever.rerank else "hybrid" if retriever.type == "hybrid" else "dense")
+    size = args.size or settings.indexing.chunker.chunk_size
+    k = args.k or retriever.top_k_per_doc
+    embedder = build_embedder(settings)
+    chunks = FixedSizeChunker(embedder, size, settings.indexing.chunker.overlap_ratio).chunk(documents)
+    index = InMemoryIndex(documents, chunks, embedder, _reranker(settings) if method == "rerank" else None)
+    out = args.out or Path(f"runs/retrieval_details_{method}_{size}_k{k}.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(details_report(index, targets, method, k, size), encoding="utf-8")
+    print(f"{len(targets)} quotes, {method}, chunks of {size} tokens, k = {k}: written to {out}")
+
+
+def run_chunks(args) -> None:
+    """The corpus cut at any size, in memory: the database is not touched."""
+    from claimverify.factory import build_embedder
+    from claimverify.indexing.chunking import FixedSizeChunker
+    from claimverify.retrieval_eval import chunks_report
+    from claimverify.settings import load_settings
+
+    settings = load_settings(args.config)
+    documents = corpus_documents(settings)
+    size = args.size or settings.indexing.chunker.chunk_size
+    overlap = settings.indexing.chunker.overlap_ratio
+    chunks = FixedSizeChunker(build_embedder(settings), size, overlap).chunk(documents)
+    out = args.out or Path(f"runs/chunks_{size}.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(chunks_report(documents, chunks, size, overlap), encoding="utf-8")
+    print(f"{len(chunks)} chunks of at most {size} tokens: written to {out}")
 
 
 def run_judge(args) -> None:
@@ -360,6 +408,20 @@ def main():
                            help="Search methods to compare with today's search (dense).")
     retrieval.add_argument("--out", type=Path, default=Path("eval/results/retrieval.md"))
     add_config_argument(retrieval)
+    details = commands.add_parser("retrieval-details",
+                                  help="The chunks the judge would read for each quote (no LLM call).")
+    details.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
+    details.add_argument("--set", type=Path, default=DEFAULT_RETRIEVAL_SET_PATH)
+    details.add_argument("--method", choices=["dense", "bm25", "hybrid", "rerank"], default=None,
+                         help="Search method (default: the verifier's in config.yaml).")
+    details.add_argument("--size", type=int, default=None, help="Chunk size in tokens (default: config.yaml's).")
+    details.add_argument("--k", type=int, default=None, help="Chunks read per document (default: config.yaml's).")
+    details.add_argument("--out", type=Path, default=None)
+    add_config_argument(details)
+    chunk_dump = commands.add_parser("chunks", help="Writes every chunk of the corpus at a chunk size (no LLM call).")
+    chunk_dump.add_argument("--size", type=int, default=None, help="Chunk size in tokens (default: config.yaml's).")
+    chunk_dump.add_argument("--out", type=Path, default=None)
+    add_config_argument(chunk_dump)
     judge = commands.add_parser("judge", help="The verifier on the gold set (LLM CALLS: costs quota).")
     judge.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
     judge.add_argument("--verdicts", type=Path, default=Path("eval/results/judge_verdicts.jsonl"))
@@ -374,6 +436,12 @@ def main():
         return
     if args.command == "retrieval":
         run_retrieval(args)
+        return
+    if args.command == "retrieval-details":
+        run_retrieval_details(args)
+        return
+    if args.command == "chunks":
+        run_chunks(args)
         return
 
     claims = load_gold(args.gold)

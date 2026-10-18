@@ -10,6 +10,9 @@ from claimverify.retrieval_eval import (
     InMemoryIndex,
     Target,
     chunk_spans,
+    chunks_report,
+    details_report,
+    one_line,
     paired_changes,
     quote_spans,
     recall_at,
@@ -143,3 +146,61 @@ def test_an_exact_word_breaks_a_tie_between_chunks_on_the_same_topic():
 def test_a_missing_quote_is_an_error_not_a_miss(bad):
     with pytest.raises(ValueError, match="quote not found"):
         index().find(Target("t", "c", "a.pdf", bad))
+
+
+def test_a_chunk_is_shown_on_one_line_with_the_quote_marked():
+    text = "alpha one\nalpha two beta"
+    assert one_line(text, (0, len(text)), [(10, 19)]) == "alpha one <mark>alpha two</mark> beta"
+    # a quote starting before the chunk is marked from the chunk's start
+    assert one_line(text, (10, len(text)), [(6, 19)]) == "<mark>alpha two</mark> beta"
+
+
+def test_the_details_show_the_chunks_read_and_the_proof_left_out():
+    idx = index()
+    found = Target("hit", "something about beta", "a.pdf", "beta two beta three")
+    missed = Target("miss", "something about beta", "a.pdf", "gamma one gamma two")
+    report = details_report(idx, [found, missed], "dense", k=1, size=6)
+
+    assert "Missed: 1/2: miss (" in report
+    assert "## hit · a.pdf · found, rank 1" in report
+    assert "**Rank 1 (proof)** · chunk #1" in report
+    assert "beta one <mark>beta two beta three</mark>" in report
+    assert "Proof's chunk, rank" in report  # the gamma chunk, ranked below k = 1
+    assert "<mark>gamma one gamma two</mark> gamma three" in report
+
+
+def test_the_chunk_dump_lists_every_chunk_of_every_document():
+    chunks = FixedSizeChunker(WordTokenizer(), chunk_size=6, overlap_ratio=0.0).chunk([DOC])
+    report = chunks_report([DOC], chunks, size=6, overlap_ratio=0.0)
+    assert "| a.pdf | 3 |" in report
+    assert report.count("tokens\n\n> ") == 3
+    assert "> gamma one gamma two gamma three" in report
+
+
+class GammaReranker:
+    """Prefers the gamma chunk, whatever the first steps said."""
+
+    def scores(self, query, texts):
+        return [float("gamma" in t) for t in texts]
+
+
+def test_the_trace_records_each_step_and_gives_the_final_order():
+    idx = InMemoryIndex([DOC], FixedSizeChunker(WordTokenizer(), chunk_size=6, overlap_ratio=0.0).chunk([DOC]),
+                        KeywordEmbedder(), GammaReranker(), candidates=2)
+    rows = idx.trace("something about beta", "a.pdf", "rerank")
+
+    assert [r.rank for r in rows] == [1, 2, 3]
+    assert [s for s, _ in idx.ranking("something about beta", "a.pdf", "rerank")] == [r.span for r in rows]
+    beta = next(r for r in rows if "beta" in TEXT[r.span[0]:r.span[1]])
+    assert (beta.dense_rank, beta.bm25_rank, beta.hybrid_rank) == (1, 1, 1)
+    assert beta.fused == pytest.approx(2 / 61)
+    # the reranker only rereads the 2 hybrid candidates; the third keeps its place, unscored
+    assert sum(r.rerank is not None for r in rows) == 2
+    assert rows[2].rerank is None and rows[2].hybrid_rank == 3
+
+
+def test_the_details_trace_each_step():
+    report = details_report(index(), [Target("hit", "something about beta", "a.pdf", "beta two beta three")],
+                            "dense", k=1, size=6)
+    assert "**Ranking, step by step**" in report
+    assert "| **1** read · **proof** | #1 | 1 · " in report
