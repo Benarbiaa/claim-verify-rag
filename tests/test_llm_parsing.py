@@ -7,7 +7,7 @@ from openai import BadRequestError
 
 from claimverify.answering.decomposition import decompose_into_claims
 from claimverify.answering.verification import judge_with_llm, read_claims_file, should_continue
-from claimverify.contracts import Claim, Draft, Passage
+from claimverify.contracts import Claim, Draft, Passage, claims_to_verify
 from fakes import failing_llm, fake_llm, provider_error
 
 DRAFT = Draft(question="Q?", text="RAG was introduced in 2020.", passages=[])
@@ -24,9 +24,25 @@ def test_decompose_rejects_invalid_json():
         decompose_into_claims(fake_llm("not json"), DRAFT)
 
 
-def test_decompose_rejects_empty_claims():
-    with pytest.raises(RuntimeError):
-        decompose_into_claims(fake_llm('{"claims": []}'), DRAFT)
+def test_decompose_accepts_no_claim_but_not_a_missing_list():
+    # a draft that only says its sources do not cover the question asserts nothing
+    assert decompose_into_claims(fake_llm('{"claims": []}'), DRAFT) == []
+    for raw in ('{}', '{"claims": null}', '[]'):
+        with pytest.raises(RuntimeError, match='No "claims" list'):
+            decompose_into_claims(fake_llm(raw), DRAFT)
+
+
+def test_decompose_keeps_the_kind_of_each_claim_and_only_topic_claims_are_verified():
+    payload = {"claims": [
+        {"id": "c1", "claim": "RAG was introduced in 2020.", "cited_source": None, "kind": "topic"},
+        {"id": "c2", "claim": "The provided passages do not mention RAPTOR.", "cited_source": None, "kind": "meta"},
+        {"id": "c3", "claim": "RAG uses BART.", "cited_source": None},  # no label: topic
+    ]}
+    claims = decompose_into_claims(fake_llm(json.dumps(payload)), DRAFT)
+    assert [c.kind for c in claims] == ["topic", "meta", "topic"]
+    assert [c.id for c in claims_to_verify(claims)] == ["c1", "c3"]
+    with pytest.raises(RuntimeError, match="malformed"):
+        decompose_into_claims(fake_llm('{"claims": [{"id": "c1", "claim": "X", "kind": "opinion"}]}'), DRAFT)
 
 
 def test_decompose_rejects_a_malformed_claim_at_the_boundary():

@@ -636,7 +636,7 @@ gave identical results.
 | # | Issue | Stage | Planned fix |
 |---|---|---|---|
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
-| Q4 | claims about the corpus instead of facts ("both papers say…") | decomposer | decomposer prompt |
+| Q4 | claims about the answer or its passages ("the provided passages do not mention X") | decomposer | the decomposer labels each claim `topic` or `meta`; only `topic` claims are verified, `meta` ones are kept in the run and shown as set aside. Measured on the 5 recorded smoke-test drafts: q09's 3 sentences labelled `meta`, no claim about the topic set aside |
 | - | reference lists are indexed like the rest of the text | cleaner | kept on purpose (minimal cleaning); measure whether reference chunks are retrieved |
 
 (Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old

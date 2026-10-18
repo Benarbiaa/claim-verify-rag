@@ -108,8 +108,10 @@ export function describeCue(e: PipelineEvent | undefined): string {
       return `${e.passages.length} passages retrieved`
     case 'draft_written':
       return 'Draft written'
-    case 'claims_extracted':
-      return `${e.claims.length} claims extracted`
+    case 'claims_extracted': {
+      const meta = e.claims.filter((c) => c.kind === 'meta').length
+      return `${e.claims.length - meta} claims extracted` + (meta ? `, ${meta} set aside` : '')
+    }
     case 'claim_verified':
       return `Claim ${e.position}/${e.total}: ${e.verdict.verdict}`
     case 'llm_waiting':

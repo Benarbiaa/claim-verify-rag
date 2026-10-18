@@ -55,7 +55,10 @@ export interface AnsweringState {
   question?: string
   passages?: Passage[]
   draft?: Draft
+  /** the claims the verifier checks (about the topic) */
   claims?: Claim[]
+  /** claims about the answer itself ("the passages do not mention X"): kept, not verified */
+  setAside?: Claim[]
   verdicts: Record<string, VerdictEntry>
   waits: WaitNotice[]
   /** a wait announced and not yet followed by the stage's result */
@@ -118,7 +121,8 @@ export function buildAnsweringState(events: PipelineEvent[], questionIndex = 1):
         state.draft = e.draft
         break
       case 'claims_extracted':
-        state.claims = e.claims
+        state.claims = e.claims.filter((c) => c.kind !== 'meta')
+        state.setAside = e.claims.filter((c) => c.kind === 'meta')
         break
       case 'claim_verified':
         state.verdicts[e.verdict.claim_id] = { verdict: e.verdict, position: e.position, total: e.total, usage: e.usage }

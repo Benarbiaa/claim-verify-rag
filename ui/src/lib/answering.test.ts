@@ -34,6 +34,26 @@ describe('buildAnsweringState', () => {
     ])
   })
 
+  it('keeps meta claims out of the plate and lists them as set aside', () => {
+    const withMeta = events.map((e) =>
+      e.type === 'claims_extracted'
+        ? { ...e, claims: [...e.claims, { id: 'm1', claim: 'The passages do not mention RAPTOR.', cited_source: null, kind: 'meta' as const }] }
+        : e,
+    )
+    const state = buildAnsweringState(withMeta)
+    expect(state.claims?.map((c) => c.id)).not.toContain('m1')
+    expect(state.claims).toHaveLength(Object.keys(state.verdicts).length)
+    expect(state.setAside?.map((c) => c.claim)).toEqual(['The passages do not mention RAPTOR.'])
+  })
+
+  it('skips verification when the answer makes no claim about the topic', () => {
+    const onlyMeta = upTo('claims_extracted').map((e) =>
+      e.type === 'claims_extracted' ? { ...e, claims: [{ id: 'm1', claim: 'No source covers this.', cited_source: null, kind: 'meta' as const }] } : e,
+    )
+    const status = Object.fromEntries(buildAnsweringState(onlyMeta).stages.map((s) => [s.id, s.status]))
+    expect(status.verify).toBe('done')
+  })
+
   it('keeps a wait pending until the stage it delays reports', () => {
     const i = events.findIndex((e) => e.type === 'llm_waiting' && e.role === 'verify')
     expect(buildAnsweringState(events.slice(0, i + 1)).pendingWait?.seconds).toBe(29)

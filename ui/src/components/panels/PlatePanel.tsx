@@ -4,6 +4,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { type AnsweringState, type Stance, documentsOf, stanceOf } from '@/lib/answering'
 import { shortDoc } from '@/lib/format'
+import type { Claim } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { StanceMark, VERDICT_TEXT, VerdictMark } from '../verdict'
@@ -56,6 +57,13 @@ export function PlatePanel({ state, selected, onSelect, judging }: Props) {
               </tr>
             </thead>
             <tbody>
+              {claims.length === 0 && (
+                <tr>
+                  <td colSpan={docs.length + 2} className="px-4 py-6 text-sm text-ink-2">
+                    The answer makes no claim about the topic: nothing to verify.
+                  </td>
+                </tr>
+              )}
               {claims.map((claim, i) => {
                 const entry = state.verdicts[claim.id]
                 const isSelected = claim.id === selectedId
@@ -122,7 +130,29 @@ export function PlatePanel({ state, selected, onSelect, judging }: Props) {
           )}
         </div>
       </div>
+
+      {state.setAside && state.setAside.length > 0 && <SetAside claims={state.setAside} />}
     </>
+  )
+}
+
+// Claims the decomposer labelled as being about the answer itself: shown, so the
+// decision not to verify them can be checked, but never judged.
+function SetAside({ claims }: { claims: Claim[] }) {
+  return (
+    <section aria-label="Claims set aside" className="mt-6 max-w-prose">
+      <h3 className="text-sm font-bold text-ink-2">Set aside, not verified</h3>
+      <p className="mt-1 text-sm text-ink-3">
+        These sentences are about the answer or its passages, not about the topic, so no source can confirm them.
+      </p>
+      <ul className="mt-2 space-y-1.5 text-[0.93rem] leading-snug text-ink-2">
+        {claims.map((c) => (
+          <li key={c.id} className="border-l-2 border-rule pl-3">
+            {c.claim}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

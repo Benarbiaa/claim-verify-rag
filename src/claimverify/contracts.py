@@ -87,11 +87,25 @@ class Draft(BaseModel):
     passages: list[Passage]
 
 
+# What a claim is about:
+#   topic  the subject of the question, or what a source reports about it: verified
+#   meta   this answer, its passages or its speaker ("the provided passages do not
+#          mention X"): not verified, since the judge reads other passages than the
+#          drafter, but kept in the run so the decision can be checked
+ClaimKind = Literal["topic", "meta"]
+
+
 class Claim(BaseModel):
     """An atomic assertion extracted from the draft."""
     id: str
     claim: str
     cited_source: str | None = None
+    kind: ClaimKind = "topic"  # absent from runs recorded before the label existed
+
+
+def claims_to_verify(claims: list[Claim]) -> list[Claim]:
+    """The claims the verifier checks: those about the topic."""
+    return [c for c in claims if c.kind == "topic"]
 
 
 class Verdict(BaseModel):

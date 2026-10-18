@@ -38,7 +38,7 @@ import time
 import psycopg2
 
 from claimverify.config import add_db_url_argument
-from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS
+from claimverify.contracts import VERDICT_ICONS, VERDICT_LABELS, claims_to_verify
 from claimverify.events import (
     ClaimsExtracted,
     ClaimVerified,
@@ -91,11 +91,14 @@ def run_single_question(query: str, stages: AnsweringStages, run: Run,
     timings["decomposition_seconds"] = round(t3 - t2, 2)
 
     # --- Step D: verification, one event per verdict as soon as it is ready ---
+    # Only the claims about the topic: the "meta" ones (about the answer or its
+    # passages) stay in the claims_extracted event, unverified.
+    to_verify = claims_to_verify(claims)
     verdicts = []
-    for position, verdict in enumerate(stages.verifier.verify(claims), 1):
+    for position, verdict in enumerate(stages.verifier.verify(to_verify), 1):
         verdicts.append(verdict)
         run.emit(ClaimVerified, question_index=question_index, position=position,
-                 total=len(claims), verdict=verdict, usage=stages.meter.take())
+                 total=len(to_verify), verdict=verdict, usage=stages.meter.take())
     t4 = time.perf_counter()
     timings["verification_seconds"] = round(t4 - t3, 2)
     timings["total_seconds"] = round(t4 - t0, 2)
@@ -183,7 +186,9 @@ def build_markdown_report(run_results: list[dict], run_metadata: dict) -> str:
             "",
             "**Verdicts:** "
             + ", ".join(f"{r['verdict_counts'][label]} {label}" for label in VERDICT_LABELS)
-            + f" (out of {len(r['claims'])} claims)",
+            + f" (out of {len(r['verdicts'])} claims"
+            + (f"; {len(r['claims']) - len(r['verdicts'])} about the answer itself, not verified)"
+               if len(r['claims']) > len(r['verdicts']) else ")"),
             "",
             "### Draft answer",
             "",

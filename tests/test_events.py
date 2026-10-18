@@ -31,11 +31,11 @@ class ListSink:
         self.events.append(event)
 
 
-def answering_stages() -> AnsweringStages:
+def answering_stages(claims: str = CLAIMS) -> AnsweringStages:
     return AnsweringStages(
         retriever=FakeRetriever(),
         drafter=LLMDrafter(fake_llm("Draft answer [a.pdf].")),
-        decomposer=LLMDecomposer(fake_llm(CLAIMS)),
+        decomposer=LLMDecomposer(fake_llm(claims)),
         verifier=LangGraphVerifier(FakeRetriever(), LLMJudge(fake_llm(VERDICT))),
     )
 
@@ -55,6 +55,25 @@ def test_answering_emits_one_event_per_stage_and_per_verdict(tmp_path):
     assert verified[0].verdict.evidence == [PASSAGE]
     assert next(e for e in sink.events if isinstance(e, DraftWritten)).draft.text == "Draft answer [a.pdf]."
     assert all(e.run_id == run.run_id and e.pipeline == "answering" for e in sink.events)
+
+
+def test_meta_claims_are_recorded_but_not_verified(tmp_path):
+    claims = json.dumps({"claims": [{"id": "c1", "claim": "A"},
+                                    {"id": "c2", "claim": "The passages do not mention B.", "kind": "meta"}]})
+    sink = ListSink()
+    result = run_single_question("Q?", answering_stages(claims), Run("answering", sinks=[sink], runs_dir=tmp_path))
+
+    extracted = next(e for e in sink.events if e.type == "claims_extracted")
+    assert [c.kind for c in extracted.claims] == ["topic", "meta"]
+    verified = [e for e in sink.events if isinstance(e, ClaimVerified)]
+    assert [(e.verdict.claim_id, e.position, e.total) for e in verified] == [("c1", 1, 1)]
+    assert len(result["claims"]) == 2 and len(result["verdicts"]) == 1
+
+
+def test_a_draft_with_no_claim_ends_without_verification(tmp_path):
+    sink = ListSink()
+    run_single_question("Q?", answering_stages('{"claims": []}'), Run("answering", sinks=[sink], runs_dir=tmp_path))
+    assert [e.type for e in sink.events][-2:] == ["claims_extracted", "question_finished"]
 
 
 def test_indexing_emits_one_event_per_stage(tmp_path, monkeypatch):

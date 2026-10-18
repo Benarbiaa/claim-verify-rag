@@ -33,7 +33,15 @@ from openai import BadRequestError
 
 from claimverify.answering.retrieval import Retriever, format_evidence
 from claimverify.config import add_db_url_argument
-from claimverify.contracts import JUDGE_LABELS, VERDICT_ICONS, VERDICT_LABELS, Claim, Passage, Verdict
+from claimverify.contracts import (
+    JUDGE_LABELS,
+    VERDICT_ICONS,
+    VERDICT_LABELS,
+    Claim,
+    Passage,
+    Verdict,
+    claims_to_verify,
+)
 from claimverify.llm import LLM
 from claimverify.settings import add_config_argument, load_settings
 
@@ -292,7 +300,7 @@ def main():
     if not args.claims_file:
         raise RuntimeError("--claims_file is required outside --debug_claim mode.")
 
-    claims = read_claims_file(args.claims_file)
+    claims = claims_to_verify(read_claims_file(args.claims_file))
 
     verifier = build_verifier(settings, build_embedder(settings), conn)
     print(f"\nVerifying {len(claims)} claims ({settings.answering.verifier.judge.model})...\n")

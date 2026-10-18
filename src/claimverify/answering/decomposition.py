@@ -9,6 +9,10 @@ No retrieval here: it is a pure text transformation, through a second LLM
 call dedicated to this single task (separate from drafting, so each step can
 be tested on its own).
 
+Each claim is labelled "topic" (about the subject, verified next) or "meta"
+(about the answer or its passages, kept in the run but not verified): the LLM
+decides, the code only acts on the label, so the decision stays visible.
+
 Input: a Draft. Output: a list of Claim (see contracts.py). Every claim the
 LLM returns is validated here: a malformed claim stops the run at this step,
 with a clear message, instead of crashing the verification.
@@ -61,20 +65,29 @@ Strict rules:
    "and", "but", "while", etc. If a sentence contains multiple facts, split it into multiple claims.
 2. Each claim must be self-contained: resolve pronouns and references ("this method", "it") to the
    actual subject they refer to, based on the surrounding context.
-3. Ignore sentences that are not factual assertions: meta-commentary ("According to the provided
-   passages...", "In summary..."), transitions, or vague statements of uncertainty with no factual
-   content of their own.
-4. If the source text cites a source in brackets (e.g. [filename.pdf | chunk #N]) for a claim,
+3. Ignore what asserts nothing: transitions ("In summary..."), introductory phrases ("According
+   to the provided passages, X" gives the claim X), or vague uncertainty with no content of its own.
+4. Label each claim with its "kind":
+   - "topic": an assertion about the subject of the text, including what a paper, study or
+     source reports about it. "The Vectara study found fixed-size chunking best on 3 of 5
+     datasets." and "RAG uses Wikipedia as its non-parametric memory." are "topic".
+   - "meta": an assertion about the text itself, the passages or sources it was given, or its
+     author. "The provided passages contain no information about X.", "No contradictory evidence
+     was found in the passages." and "The question cannot be answered from the given sources."
+     are "meta".
+   Extract both kinds; when unsure, use "topic". A text that only says its sources do not cover
+   the question has no "topic" claim. If the text asserts nothing at all, return an empty list.
+5. If the source text cites a source in brackets (e.g. [filename.pdf | chunk #N]) for a claim,
    carry that citation into the claim's "cited_source" field. If several claims come from the same
    source sentence, they all inherit the same citation.
-5. If a claim has no explicit citation in the text, set "cited_source" to null.
+6. If a claim has no explicit citation in the text, set "cited_source" to null.
 
 Respond ONLY with a valid JSON object, no text before or after, in this format:
 
 {
   "claims": [
-    {"id": "c1", "claim": "...", "cited_source": "... or null"},
-    {"id": "c2", "claim": "...", "cited_source": "... or null"}
+    {"id": "c1", "claim": "...", "cited_source": "... or null", "kind": "topic"},
+    {"id": "c2", "claim": "...", "cited_source": "... or null", "kind": "meta"}
   ]
 }
 """
@@ -97,9 +110,11 @@ def decompose_into_claims(llm: LLM, draft: Draft) -> list[Claim]:
             f"The model did not return valid JSON.\nRaw answer:\n{raw_text}"
         ) from e
 
-    claims = parsed.get("claims", [])
-    if not claims:
-        raise RuntimeError(f"No claim extracted. Raw answer:\n{raw_text}")
+    # An empty list is a valid answer (a draft that only says its sources do not
+    # cover the question); a missing list is not.
+    claims = parsed.get("claims") if isinstance(parsed, dict) else None
+    if not isinstance(claims, list):
+        raise RuntimeError(f"No \"claims\" list in the answer. Raw answer:\n{raw_text}")  # noqa: TRY004 (same error as the other unusable answers)
 
     try:
         return [Claim.model_validate(c) for c in claims]
@@ -113,7 +128,8 @@ def print_claims(claims: list[Claim]):
     print(f"\n{len(claims)} claims extracted:\n")
     for c in claims:
         source = c.cited_source or "(no source cited)"
-        print(f"  [{c.id}] {c.claim}")
+        label = "" if c.kind == "topic" else " (meta: not verified)"
+        print(f"  [{c.id}] {c.claim}{label}")
         print(f"        source: {source}\n")
 
 

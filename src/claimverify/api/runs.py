@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from claimverify.contracts import claims_to_verify
 from claimverify.events import Event
 from claimverify.reporting import load_events
 
@@ -120,7 +121,8 @@ def summarize(folder: RunFolder, events: list[Event]) -> dict:
         summary |= {
             "questions": [e.question for e in events if e.type == "question_started"],
             "verdict_counts": counts,
-            "claims": sum(len(e.claims) for e in events if e.type == "claims_extracted"),
+            # the verified claims: the "meta" ones (about the answer itself) have no verdict
+            "claims": sum(len(claims_to_verify(e.claims)) for e in events if e.type == "claims_extracted"),
         }
     else:
         docs = next((e for e in events if e.type == "documents_loaded"), None)

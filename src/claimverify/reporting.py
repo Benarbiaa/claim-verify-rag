@@ -71,7 +71,9 @@ class ConsoleSink:
         if t == "draft_written":
             return f"[draft] {len(event.draft.text.split())} words ({s})"
         if t == "claims_extracted":
-            return f"[decompose] {len(event.claims)} claims ({s})"
+            meta = sum(c.kind == "meta" for c in event.claims)
+            return (f"[decompose] {len(event.claims)} claims"
+                    + (f", {meta} about the answer itself (not verified)" if meta else "") + f" ({s})")
         if t == "claim_verified":
             v = event.verdict
             note = _usage_note(event).removeprefix(", ")
@@ -81,7 +83,7 @@ class ConsoleSink:
             return (f"[wait] {event.role}: {event.reason.replace('_', ' ')}, "
                     f"retrying in {event.seconds:.0f}s (attempt {event.attempt + 1})")
         if t == "question_finished":
-            counts = ", ".join(f"{n} {label}" for label, n in event.verdict_counts.items() if n)
+            counts = ", ".join(f"{n} {label}" for label, n in event.verdict_counts.items() if n) or "no claim to verify"
             return f"[done] {counts} ({s})"
         if t == "run_finished":
             return f"[run] finished ({s}) -> {event.summary.get('run_dir', '')}"

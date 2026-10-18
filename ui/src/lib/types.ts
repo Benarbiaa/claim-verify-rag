@@ -32,6 +32,8 @@ export interface Claim {
   id: string
   claim: string
   cited_source: string | null
+  /** 'meta': about the answer or its passages, not verified (absent from older runs: 'topic') */
+  kind?: 'topic' | 'meta'
 }
 
 export interface Verdict {
