@@ -113,7 +113,17 @@ them before building the eval baseline**, or the numbers you report will be skew
   reviewed labels, from the same verdicts. See `eval/label_reviews.md`. Results: `eval/results/judge.md`.
 - [ ] (superseded by `make eval-judge`) Write `scripts/run_eval.py`: verifier-only scoring, confusion matrix, per-class P/R,
   false-contradiction rate.
-- [ ] Build `eval/questions.jsonl` (20–30 questions) for end-to-end runs.
+- [x] End-to-end evaluation (`make eval-e2e`): `eval/questions.jsonl`, 10 questions proven by
+  quotes, scored from the recorded runs (`e2e_eval.py`). Smoke test (5 questions, one per
+  category): **4/5**, 162K tokens. The miss, q05 (conflict): the draft says the evidence is
+  mixed, but the decomposer splits it into claims attributed to one paper each ("Vectara
+  found…", "LumberChunker reports…"), each rightly `supported`: no claim carries both sides, so
+  no `contested`. Results: `eval/results/e2e.md`.
+- [ ] **Conflicts dissolve in decomposition.** Attributed claims are true about their own paper,
+  so the more faithful the decomposer, the less `contested` can fire. Candidate fixes: also
+  extract the unattributed claim under a disagreement ("LLM-based chunking consistently
+  improves retrieval"), or let the verifier compare claims on the same subject.
+- [ ] Run the 5 other questions (`make eval-e2e ALL=1 RESUME=1`, about 200K tokens).
 - [ ] Ablations, one table each: global vs. per-document retrieval · `top_k_per_doc` 2/3/4 ·
   2 LLMs. Report accuracy, latency and tokens.
 - [ ] Deduplicate near-identical claims after decomposition (embedding cosine > ~0.92), and

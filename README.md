@@ -56,6 +56,22 @@ The label was changed after the run, so the judge did not improve, the label did
 no clean contradiction: `contested` rests on one claim, a general claim tested on different
 methods by the two papers.
 
+**Does the whole pipeline work?** A question set proven by quotes, scored from the recorded runs
+([`eval/results/e2e.md`](eval/results/e2e.md)). Smoke test, one question per category:
+
+| Case | Result |
+|---|---|
+| Finding from one paper | pass |
+| Two papers, no conflict between them | pass |
+| Real disagreement between two papers | **fail** |
+| False premise in the question ("why does RAG fine-tune its document encoder?") | pass: corrected |
+| Subject the corpus never discusses | pass: no claim verified |
+
+**4/5.** The miss shows a limit of the design: the draft says the evidence is mixed, but the
+decomposer splits it into claims attributed to one paper each ("Vectara found…", "LumberChunker
+reports…"). Each is true about its own paper, so no claim carries both sides and none comes out
+`contested`.
+
 ## How it works
 
 ```

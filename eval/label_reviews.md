@@ -66,7 +66,7 @@ recorded run (2026-09-26) the draft said both papers agree, with both proofs rea
 | Evaluation | Original labels | After this review |
 |---|---|---|
 | Judge on the gold set | **9/10** (contested 1/2, complementary 2/2) | **10/10** (contested 1/1, complementary 3/3) |
-| End-to-end smoke test | 4/5 (q06 failed "conflict found") | 4/4 run, q05 not run yet; q06 passes as `multi_source` |
+| End-to-end smoke test | 4/5 (q06 failed "conflict found") | 4/5: q05 replaces q06 and fails "conflict found" (run on 2026-10-18, after the review); q06 passes as `multi_source` |
 
 No verdict was re-run: the same recorded verdicts were scored against the reviewed labels
 (`make eval-judge RESUME=1` with every verdict saved makes no LLM call; the original run's cost,
