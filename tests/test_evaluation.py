@@ -5,7 +5,16 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from claimverify.evaluation import CATEGORIES, GoldClaim, check_gold, load_gold
+from claimverify.evaluation import (
+    CATEGORIES,
+    QUESTION_CATEGORIES,
+    GoldClaim,
+    GoldQuestion,
+    check_gold,
+    check_questions,
+    load_gold,
+    load_questions,
+)
 
 DOCS = {
     "a.pdf": "LumberChunker uses an LLM to find\nsemantic shifts in narra-\ntive text.",
@@ -94,3 +103,73 @@ def test_unknown_files_duplicate_ids_and_missing_categories_are_reported():
     assert any("duplicate id" in p for p in problems)
     assert any("missing.pdf is not in the corpus" in p for p in problems)
     assert any("no claim in the category out_of_corpus" in p for p in problems)
+
+
+# --- question set (end to end) ----------------------------------------------------------
+
+def question(category="single_source", evidence=None, **kw) -> dict:
+    if evidence is None:
+        evidence = [{"filename": "a.pdf", "stance": "supports", "quote": QUOTE_A}]
+    return {"id": "q01", "category": category, "question": "How does LumberChunker find chunk boundaries?",
+            "evidence": evidence, **kw}
+
+
+PRO_A = {"filename": "a.pdf", "stance": "supports", "quote": QUOTE_A}
+PRO_B = {"filename": "b.pdf", "stance": "supports", "quote": QUOTE_B}
+CON_A = {"filename": "a.pdf", "stance": "contradicts", "quote": QUOTE_A}
+CON_B = {"filename": "b.pdf", "stance": "contradicts", "quote": QUOTE_B}
+
+
+def one_question_per_category() -> list[GoldQuestion]:
+    cases = {
+        "single_source": question(),
+        "multi_source": question("multi_source", [PRO_A, PRO_B]),
+        "conflict": question("conflict", [PRO_A, CON_B], statement="Semantic chunking beats fixed-size chunking."),
+        "false_premise": question("false_premise", [CON_A], statement="LumberChunker uses no LLM."),
+        "out_of_corpus": question("out_of_corpus", []),
+    }
+    assert set(cases) == set(QUESTION_CATEGORIES)
+    return [GoldQuestion.model_validate(q | {"id": f"q{i}"}) for i, q in enumerate(cases.values())]
+
+
+def test_the_documents_to_use_are_those_holding_a_quote():
+    q = GoldQuestion.model_validate(question("multi_source", [PRO_A, PRO_B]))
+    assert q.documents == {"a.pdf", "b.pdf"}
+    assert GoldQuestion.model_validate(question("out_of_corpus", [])).documents == set()
+
+
+def test_single_and_multi_source_questions_need_one_or_several_documents():
+    with pytest.raises(ValidationError, match="all from one document"):
+        GoldQuestion.model_validate(question(evidence=[PRO_A, PRO_B]))
+    with pytest.raises(ValidationError, match="at least two documents"):
+        GoldQuestion.model_validate(question("multi_source"))
+
+
+def test_a_conflict_needs_two_documents_on_opposite_sides_of_a_statement():
+    statement = {"statement": "Semantic chunking beats fixed-size chunking."}
+    with pytest.raises(ValidationError, match="different documents"):
+        GoldQuestion.model_validate(question("conflict", [PRO_A, CON_A], **statement))
+    with pytest.raises(ValidationError, match="needs statement"):
+        GoldQuestion.model_validate(question("conflict", [PRO_A, CON_B]))
+
+
+def test_a_false_premise_is_only_contradicted_and_other_categories_take_no_statement():
+    with pytest.raises(ValidationError, match="none for it"):
+        GoldQuestion.model_validate(question("false_premise", [CON_A, PRO_B], statement="LumberChunker uses no LLM."))
+    with pytest.raises(ValidationError, match="takes no statement"):
+        GoldQuestion.model_validate(question(statement="LumberChunker uses no LLM."))
+    with pytest.raises(ValidationError, match="no quote"):
+        GoldQuestion.model_validate(question("out_of_corpus"))
+
+
+def test_the_question_set_is_checked_against_the_corpus_like_the_gold_set(tmp_path):
+    questions = one_question_per_category()
+    assert check_questions(questions, DOCS) == []
+    path = tmp_path / "questions.jsonl"
+    path.write_text("".join(q.model_dump_json() + "\n" for q in questions), encoding="utf-8")
+    assert load_questions(path) == questions
+
+    questions[0].evidence[0].quote = "LumberChunker uses GPT-4 to find semantic shifts in narrative text."
+    problems = check_questions(questions[1:4] + questions[:1], DOCS)
+    assert any("q0: quote not found in a.pdf" in p for p in problems)
+    assert any("no question in the category out_of_corpus" in p for p in problems)

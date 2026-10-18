@@ -18,12 +18,19 @@ quote pairs, with no verdict. It only measures whether the search brings
 back the proof (retrieval_eval.py): no label to review, no LLM call, so more
 items are affordable.
 
+The question set (eval/questions.jsonl) is for the end-to-end evaluation:
+questions whose claims the pipeline writes itself, so what is known in
+advance is which documents hold the answer, and for some questions a
+statement the pipeline must find contested or false (GoldQuestion).
+
 Usage:
-    python -m claimverify.evaluation check-gold         (no LLM call, no database)
+    python -m claimverify.evaluation check-gold         (both sets; no LLM call, no database)
     python -m claimverify.evaluation retrieval          (no LLM call; GPU for the embedding)
     python -m claimverify.evaluation retrieval-details  (no LLM call: the chunks the judge would read)
     python -m claimverify.evaluation chunks --size 256  (no LLM call: the corpus cut at that size)
     python -m claimverify.evaluation judge              (LLM CALLS: the judge on the gold set)
+    python -m claimverify.evaluation e2e                (LLM CALLS: the pipeline on the question set)
+    python -m claimverify.evaluation score-e2e          (scores the recorded runs again; no LLM call)
 """
 
 import argparse
@@ -42,6 +49,7 @@ M = TypeVar("M", bound=BaseModel)
 
 DEFAULT_GOLD_PATH = Path("eval/claims_gold.jsonl")
 DEFAULT_RETRIEVAL_SET_PATH = Path("eval/retrieval_set.jsonl")
+DEFAULT_QUESTIONS_PATH = Path("eval/questions.jsonl")
 CORPUS_DIR = Path("data/corpus")
 
 Category = Literal["single_source", "perturbed_fact", "cross_source_conflict",
@@ -93,6 +101,53 @@ class RetrievalPair(BaseModel):
     quote: str = Field(min_length=20)
 
 
+QuestionCategory = Literal["single_source", "multi_source", "conflict", "out_of_corpus", "false_premise"]
+QUESTION_CATEGORIES: tuple[str, ...] = get_args(QuestionCategory)
+
+
+class GoldQuestion(BaseModel):
+    """A question for the end-to-end evaluation. Its claims are written by the
+    pipeline, so they cannot be labelled in advance: what is known in advance
+    is which documents hold the answer (those with a quote) and, for some
+    categories, a `statement` the pipeline must find contested or false.
+
+    A quote's stance refers to the `statement` when there is one, otherwise to
+    the expected answer."""
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    category: QuestionCategory
+    question: str = Field(min_length=10)
+    statement: str | None = None  # conflict: what the sources disagree on; false_premise: the false premise
+    evidence: list[GoldEvidence] = []
+    note: str = ""
+
+    @property
+    def documents(self) -> set[str]:
+        """The documents the pipeline must use: those holding a quote."""
+        return {e.filename for e in self.evidence}
+
+    @model_validator(mode="after")
+    def _evidence_matches_the_category(self) -> "GoldQuestion":
+        pro = {e.filename for e in self.evidence if e.stance == "supports"}
+        con = {e.filename for e in self.evidence if e.stance == "contradicts"}
+        rules = {
+            "single_source": (pro and not con and len(pro) == 1, "quotes for the answer, all from one document"),
+            "multi_source": (pro and not con and len(pro) >= 2, "quotes for the answer from at least two documents"),
+            # as for a contested claim: the SOURCES disagree, so a document on each side
+            "conflict": (any(p != c for p in pro for c in con),
+                         "quotes for and against the statement, from different documents"),
+            "false_premise": (con and not pro, "quotes against the premise, none for it"),
+            "out_of_corpus": (not self.evidence, "no quote (the corpus does not discuss it)"),
+        }
+        ok, rule = rules[self.category]
+        if not ok:
+            raise ValueError(f"'{self.category}' needs {rule}")
+        needs_statement = self.category in ("conflict", "false_premise")
+        if needs_statement != (self.statement is not None):
+            raise ValueError(f"'{self.category}' {'needs' if needs_statement else 'takes no'} statement")
+        return self
+
+
 def _load_jsonl(path: Path, model: type[M]) -> list[M]:
     """One JSON line per object; blank lines are ignored. An error names the
     faulty line."""
@@ -115,18 +170,32 @@ def load_retrieval_set(path: Path) -> list[RetrievalPair]:
     return _load_jsonl(path, RetrievalPair)
 
 
+def load_questions(path: Path) -> list[GoldQuestion]:
+    return _load_jsonl(path, GoldQuestion)
+
+
 def check_gold(claims: list[GoldClaim], documents: dict[str, str]) -> list[str]:
     """The gold set's problems against the corpus (documents: filename ->
     STORED text, i.e. cleaned). An empty list = a usable gold set."""
-    problems = []
-    for claim_id, n in Counter(c.id for c in claims).items():
-        if n > 1:
-            problems.append(f"duplicate id: {claim_id} ({n} times)")
-    for category in CATEGORIES:
-        if not any(c.category == category for c in claims):
-            problems.append(f"no claim in the category {category}")
+    return _set_problems(claims, CATEGORIES, "claim", documents)
 
-    quotes = [(c.id, e.filename, e.quote) for c in claims for e in c.evidence]
+
+def check_questions(questions: list[GoldQuestion], documents: dict[str, str]) -> list[str]:
+    """Same checks for the question set."""
+    return _set_problems(questions, QUESTION_CATEGORIES, "question", documents)
+
+
+def _set_problems(items: list[GoldClaim] | list[GoldQuestion], categories: tuple[str, ...],
+                  kind: str, documents: dict[str, str]) -> list[str]:
+    problems = []
+    for item_id, n in Counter(i.id for i in items).items():
+        if n > 1:
+            problems.append(f"duplicate id: {item_id} ({n} times)")
+    for category in categories:
+        if not any(i.category == category for i in items):
+            problems.append(f"no {kind} in the category {category}")
+
+    quotes = [(i.id, e.filename, e.quote) for i in items for e in i.evidence]
     return problems + _quote_problems(quotes, documents)
 
 
@@ -390,6 +459,98 @@ def run_judge(args) -> None:
     print("\n" + text + f"\nWritten to {args.out} (verdicts: {args.verdicts})")
 
 
+def _selected(questions: list[GoldQuestion], only: list[str] | None) -> list[GoldQuestion]:
+    """The questions named by --only (all of them without it)."""
+    if not only:
+        return questions
+    unknown = set(only) - {q.id for q in questions}
+    if unknown:
+        sys.exit(f"Unknown question ids: {', '.join(sorted(unknown))}")
+    return [q for q in questions if q.id in only]
+
+
+def _load_manifest(path: Path) -> dict[str, dict]:
+    """question id -> {"run_id", "question_index"}: which recorded run answered it."""
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def run_e2e(args) -> None:
+    """The whole pipeline on each question of the set (LLM CALLS, about 50K
+    tokens per question). Each question is its own run in runs/, recorded in
+    the manifest as soon as it finishes: a stop (daily limit) loses nothing
+    already paid for, and --resume skips the questions already answered."""
+    import time
+
+    import psycopg2
+
+    from claimverify.answering.pipeline import run_single_question
+    from claimverify.events import RunFinished, RunStarted
+    from claimverify.factory import build_answering
+    from claimverify.llm import LLMCallError
+    from claimverify.reporting import Run
+    from claimverify.settings import load_settings
+
+    settings = load_settings(args.config)
+    questions = load_questions(args.questions)
+    problems = check_questions(questions, corpus_texts(settings))
+    if problems:
+        sys.exit("Invalid question set:\n  - " + "\n  - ".join(problems))
+    questions = _selected(questions, args.only)
+
+    manifest = _load_manifest(args.manifest) if args.resume else {}
+    todo = [q for q in questions if q.id not in manifest]
+    print(f"{len(manifest)} questions already answered, {len(todo)} to run "
+          f"(about {50 * len(todo)}K tokens)", flush=True)
+
+    conn = psycopg2.connect(args.db_url)
+    args.manifest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        stages = build_answering(settings, conn)
+        for q in todo:
+            run, start = Run("answering"), time.perf_counter()
+            run.emit(RunStarted, config=settings.model_dump(),
+                     inputs={"config_file": str(args.config), "questions": [q.question], "eval_question": q.id})
+            run_single_question(q.question, stages, run)
+            run.emit(RunFinished, seconds=time.perf_counter() - start, summary={"questions": 1, "run_dir": str(run.dir)})
+            manifest[q.id] = {"run_id": run.run_id, "question_index": 1}
+            args.manifest.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    except LLMCallError as e:
+        print(f"Stopped: {e} (resume with --resume)", flush=True)
+    finally:
+        conn.close()
+    score_e2e(args)
+
+
+def score_e2e(args) -> None:
+    """Scores the runs of the manifest (no LLM call): rerun it after changing a check."""
+    from claimverify.e2e_eval import read_question, report, review_sheet, score_question
+    from claimverify.reporting import RUNS_DIR, load_events
+
+    questions = _selected(load_questions(args.questions), args.only)
+    manifest = _load_manifest(args.manifest)
+    scored, models = [], "No run"
+    for q in questions:
+        entry = manifest.get(q.id)
+        if entry is None:
+            continue
+        events = load_events(RUNS_DIR / entry["run_id"] / "events.jsonl")
+        run = read_question(events, entry["question_index"])
+        if run is None:
+            print(f"{q.id}: run {entry['run_id']} did not finish, not scored", flush=True)
+            continue
+        scored.append(score_question(q, run))
+        answering = events[0].config["answering"]
+        models = (f"Drafter `{answering['drafter']['model']}`, "
+                  f"judge `{answering['verifier']['judge']['model']}`")
+
+    text = report(scored, questions, models)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(text, encoding="utf-8")
+    review = args.out.with_name(args.out.stem + "_review.md")
+    review.write_text(review_sheet(scored), encoding="utf-8")
+    print("\n" + text + f"\nWritten to {args.out} (review sheet: {review})")
+
+
 def main():
     from claimverify.config import add_db_url_argument
     from claimverify.settings import add_config_argument, load_settings
@@ -398,6 +559,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("check-gold", help="Checks the gold set (no LLM call).")
     check.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
+    check.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS_PATH)
     add_config_argument(check)
     retrieval = commands.add_parser("retrieval", help="Does the search bring back the proofs? (no LLM call)")
     retrieval.add_argument("--gold", type=Path, default=DEFAULT_GOLD_PATH)
@@ -429,8 +591,25 @@ def main():
     judge.add_argument("--resume", action="store_true", help="Keeps the verdicts already written, asks for the others.")
     add_config_argument(judge)
     add_db_url_argument(judge)
+    e2e = commands.add_parser("e2e", help="The whole pipeline on the question set (LLM CALLS: costs quota).")
+    rescore = commands.add_parser("score-e2e", help="Scores the recorded end-to-end runs (no LLM call).")
+    for p in (e2e, rescore):
+        p.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS_PATH)
+        p.add_argument("--manifest", type=Path, default=Path("eval/results/e2e_runs.json"))
+        p.add_argument("--out", type=Path, default=Path("eval/results/e2e.md"))
+        p.add_argument("--only", nargs="*", default=None, metavar="ID",
+                       help="Only these questions (e.g. q01 q04), for a smoke test within one day's quota.")
+    e2e.add_argument("--resume", action="store_true", help="Keeps the questions already answered, runs the others.")
+    add_config_argument(e2e)
+    add_db_url_argument(e2e)
     args = parser.parse_args()
 
+    if args.command == "e2e":
+        run_e2e(args)
+        return
+    if args.command == "score-e2e":
+        score_e2e(args)
+        return
     if args.command == "judge":
         run_judge(args)
         return
@@ -444,19 +623,28 @@ def main():
         run_chunks(args)
         return
 
+    texts = corpus_texts(load_settings(args.config))
     claims = load_gold(args.gold)
-    problems = check_gold(claims, corpus_texts(load_settings(args.config)))
+    problems = check_gold(claims, texts)
 
     print(f"{len(claims)} claims in {args.gold}")
     for category in CATEGORIES:
         labels = Counter(c.expected for c in claims if c.category == category)
         print(f"  {category:22} {sum(labels.values())}  " + ", ".join(f"{n} {lab}" for lab, n in labels.items()))
+    if args.questions.exists():
+        questions = load_questions(args.questions)
+        problems += check_questions(questions, texts)
+        print(f"\n{len(questions)} questions in {args.questions}")
+        for category in QUESTION_CATEGORIES:
+            print(f"  {category:22} {sum(q.category == category for q in questions)}")
+    else:
+        print(f"\nNo question set yet ({args.questions}): not checked.")
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:
             print(f"  - {p}")
         sys.exit(1)
-    print("\nGold set valid.")
+    print("\nEvaluation sets valid.")
 
 
 if __name__ == "__main__":

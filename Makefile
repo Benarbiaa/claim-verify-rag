@@ -3,9 +3,12 @@
 
 PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
+# The end-to-end smoke test: one question per category, within one day of the judge's
+# free-tier quota (200K tokens). q06 rather than q05: see q05's note in eval/questions.jsonl.
+E2E_SMOKE ?= q01 q04 q06 q07 q09
 
 .DEFAULT_GOAL := help
-.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval retrieval-details chunks eval-judge
+.PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval retrieval-details chunks eval-judge eval-e2e score-e2e
 
 help: ## List the commands
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  make %-14s %s\n", $$1, $$2}'
@@ -47,7 +50,7 @@ lint: ## Check the Python code with ruff
 ui-test: ## Type-check and test the web UI
 	cd ui && npx tsc -b && npx vitest run
 
-check-gold: ## Check the gold set: labels, sources, and that every quote is in the corpus (no LLM call)
+check-gold: ## Check the gold set and the question set: labels, sources, every quote in the corpus (no LLM call)
 	$(PY) -m claimverify.evaluation check-gold
 
 eval-retrieval: ## Does the search bring back each proof? Methods and chunk sizes compared in memory (no LLM call)
@@ -61,6 +64,12 @@ chunks: ## Cut the corpus at SIZE= tokens in memory and write every chunk to run
 
 eval-judge: ## The judge on the 10 gold claims (calls the LLM APIs, about 40K tokens; RESUME=1 continues a stopped run)
 	$(PY) -m claimverify.evaluation judge $(if $(RESUME),--resume)
+
+eval-e2e: ## Smoke test: the whole pipeline on 5 questions, one per category (calls the LLM APIs, about 150-200K tokens; ALL=1: the 10 questions; RESUME=1 continues)
+	$(PY) -m claimverify.evaluation e2e $(if $(ALL),,--only $(E2E_SMOKE)) $(if $(RESUME),--resume)
+
+score-e2e: ## Score the recorded end-to-end runs again (no LLM call; ALL=1: the 10 questions)
+	$(PY) -m claimverify.evaluation score-e2e $(if $(ALL),,--only $(E2E_SMOKE))
 
 requirements: ## Regenerate requirements.txt from pyproject.toml and the installed packages
 	$(PY) scripts/freeze_requirements.py > requirements.txt
