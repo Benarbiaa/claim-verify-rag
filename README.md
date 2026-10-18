@@ -37,20 +37,24 @@ document? No LLM call ([`eval/results/retrieval.md`](eval/results/retrieval.md))
 | Hybrid: meaning + exact words (BM25), rankings fused | 31/44 |
 | **Hybrid + cross-encoder reranker (current)** | **37/44** |
 
-**Is the verdict right?** The full verifier on a hand-checked gold set of 10 claims, 2 per case,
-each label proven by an exact quote ([`eval/results/judge.md`](eval/results/judge.md)):
+**Is the verdict right?** The full verifier on a hand-checked gold set of 10 claims, each label
+proven by an exact quote ([`eval/results/judge.md`](eval/results/judge.md)):
 
 | Case | Correct |
 |---|---|
 | Finding from one paper (supported) | 2/2 |
 | One detail changed: a number, a source (contradicted) | 2/2 |
-| Real disagreement between two papers (contested) | 1/2 |
-| Related technique that must not be read as a contradiction (supported) | 2/2 |
+| Real disagreement between two papers (contested) | 1/1 |
+| Related statement that must not be read as a contradiction (supported) | 3/3 |
 | Fact the corpus never discusses (unverifiable) | 2/2 |
 
-**9/10**, no false contradiction. The miss: Vectara's introduction says chunking has "a crucial
-effect", its conclusion that the effect is "overshadowed" by the embedding model. The search
-brought the introduction, so the judge answered `supported` instead of `contested`.
+**10/10, after a label review: 9/10 on the original labels.** One claim labelled `contested` was a
+scope difference, not a conflict: Vectara's introduction says chunking has "a crucial effect", its
+conclusion that the impact of chunking *strategy* was "often overshadowed" by the embedding model.
+The label was changed after the run, so the judge did not improve, the label did
+([`eval/label_reviews.md`](eval/label_reviews.md)). The review also found that the corpus holds
+no clean contradiction: `contested` rests on one claim, a general claim tested on different
+methods by the two papers.
 
 ## How it works
 
@@ -247,8 +251,9 @@ Details and priorities: [`docs/roadmap.md`](docs/roadmap.md).
   say the same thing). They are not deduplicated yet.
 - The evaluation is small: 10 gold claims and 44 retrieval quotes, written while reading the
   papers. It detects large problems and compares settings; it is not a statistical measure.
-- A conflict can stay hidden when a paper says one thing in its introduction and the opposite in
-  its conclusion: the search tends to bring the introduction (see Results).
+- The corpus has no clean contradiction (same method, same kind of data, opposite results): its
+  disagreements are differences of scope. `contested` is tested by one gold claim and one
+  question ([`eval/label_reviews.md`](eval/label_reviews.md)).
 - `top_k_per_doc=2` keeps requests under Groq's free-tier tokens-per-minute cap; `3` was measured
   and brings one more proof for 45 % more tokens per verdict.
 - The reranker adds about 2.6 s per claim on a GPU.

@@ -4,8 +4,8 @@
 PY ?= .venv/bin/python
 QUESTIONS ?= eval/smoke_questions.txt
 # The end-to-end smoke test: one question per category, within one day of the judge's
-# free-tier quota (200K tokens). q06 rather than q05: see q05's note in eval/questions.jsonl.
-E2E_SMOKE ?= q01 q04 q06 q07 q09
+# free-tier quota (200K tokens).
+E2E_SMOKE ?= q01 q04 q05 q07 q09
 
 .DEFAULT_GOAL := help
 .PHONY: help install db-up db-down ingest check run batch ui test lint ui-test requirements check-gold eval-retrieval retrieval-details chunks eval-judge eval-e2e score-e2e

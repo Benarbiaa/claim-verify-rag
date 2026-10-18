@@ -37,11 +37,14 @@ measure: results are reported as counts ("1/2"), never as percentages.
 |---|---|---|
 | `single_source` | Copy a finding straight from one paper | supported |
 | `perturbed_fact` | Take a true claim and change a number, name, year or direction | contradicted |
-| `cross_source_conflict` | Claims where Vectara and LumberChunker disagree | contested* |
-| `complementary` | Anthropic contextual-retrieval claims next to the chunking papers | supported (must NOT be contradicted) |
+| `cross_source_conflict` | Claims on which two documents make incompatible statements | contested* |
+| `complementary` | Related statements that must not be read as a contradiction: a complementary technique (Anthropic next to the chunking papers), or a paper qualifying a point at a different scope (g05) | supported (must NOT be contradicted) |
 | `out_of_corpus` | Plausible RAG facts the corpus never discusses | unverifiable |
 
-\* `contested` exists since P0-3. Answers the judge failed to produce are labelled `error`,
+\* A `contested` label needs quotes making incompatible statements about the same proposition; a
+weaker, narrower or relative statement is not a contradiction. Labels changed after seeing
+results are recorded, with the scores before and after, in [`label_reviews.md`](label_reviews.md).
+`contested` exists since P0-3. Answers the judge failed to produce are labelled `error`,
 never `unverifiable`, so they don't distort that class.
 
 Metrics: per-class precision and recall, a confusion matrix, and a separate
@@ -78,14 +81,15 @@ must find contested or false. A quote's stance refers to the `statement` when th
 otherwise to the expected answer.
 
 ```json
-{"id": "q05", "category": "conflict", "question": "Does semantic chunking improve retrieval ...?",
+{"id": "q05", "category": "conflict", "question": "Does chunking documents by their content ... consistently improve retrieval ...?",
  "statement": "Chunking documents according to their content ... consistently improves retrieval.",
  "evidence": [{"filename": "lumberchunker-emnlp2024.pdf", "stance": "supports", "quote": "..."},
               {"filename": "vectara-semantic-chunking-naacl2025.pdf", "stance": "contradicts", "quote": "..."}],
  "note": "why we expect this"}
 ```
 
-10 questions, 2 per category; `make eval-e2e` runs 5 of them (one per category) as a smoke
+10 questions (2 or 3 per category, a single conflict question: see
+[`label_reviews.md`](label_reviews.md)); `make eval-e2e` runs 5 of them (one per category) as a smoke
 test that fits one day of the judge's free-tier quota. Each category has its quote rules (checked by `make check-gold`)
 and its checks, read from the run's recorded events with no LLM call
 (`src/claimverify/e2e_eval.py`). A question passes when all its checks pass.
