@@ -7,10 +7,6 @@
     "run_id": "20261012_150207_answering",
     "question_index": 1
   },
-  "q06": {
-    "run_id": "20261012_150854_answering",
-    "question_index": 1
-  },
   "q07": {
     "run_id": "20261012_151210_answering",
     "question_index": 1
@@ -21,6 +17,26 @@
   },
   "q05": {
     "run_id": "20261019_120109_answering",
+    "question_index": 1
+  },
+  "q02": {
+    "run_id": "20261019_124435_answering",
+    "question_index": 1
+  },
+  "q03": {
+    "run_id": "20261019_124650_answering",
+    "question_index": 1
+  },
+  "q06": {
+    "run_id": "20261019_125050_answering",
+    "question_index": 1
+  },
+  "q08": {
+    "run_id": "20261019_130336_answering",
+    "question_index": 1
+  },
+  "q10": {
+    "run_id": "20261019_130521_answering",
     "question_index": 1
   }
 }

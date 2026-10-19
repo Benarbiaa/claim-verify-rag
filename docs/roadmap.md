@@ -115,7 +115,8 @@ them before building the eval baseline**, or the numbers you report will be skew
   false-contradiction rate.
 - [x] End-to-end evaluation (`make eval-e2e`): `eval/questions.jsonl`, 10 questions proven by
   quotes, scored from the recorded runs (`e2e_eval.py`). Smoke test (5 questions, one per
-  category): first 4/5, then **5/5** after the fix below. Results: `eval/results/e2e.md`.
+  category): first 4/5, then **5/5** after the fix below. All 10 questions: **9/10**, 356K
+  tokens in all. Results: `eval/results/e2e.md`.
 - [x] **Conflicts dissolved in decomposition.** q05's draft said the evidence was mixed, but the
   decomposer split it into claims attributed to one paper each ("Vectara found…",
   "LumberChunker reports…"): each true about its own paper, so none could be `contested`.
@@ -131,7 +132,17 @@ them before building the eval baseline**, or the numbers you report will be skew
 - [ ] A false detail can come out `unverifiable` instead of `contradicted`: "Vectara's
   evaluation includes LLM-driven splitting" (it tests embedding-based chunkers only) was judged
   unverifiable, since no passage says what was *not* tested.
-- [ ] Run the 5 other questions (`make eval-e2e ALL=1 RESUME=1`, about 200K tokens).
+- [x] The 5 other questions (q02, q03, q06, q08, q10; q06 rerun with today's decomposer, being
+  the trap for the disagreement rule): 4/5, 186K tokens. q06 got no false `contested`.
+- [ ] **The judge reads a broader truth as a contradiction.** q06: "Poorly chosen chunk
+  boundaries can fragment context" came out `contradicted` by 3 sources, because they say
+  splitting strips context in general. The same scope mistake as the g05 label
+  (`eval/label_reviews.md`), made by the judge. Candidate fix: a judge rule, "a statement
+  that is true more broadly than the claim supports it; contradict only an incompatible
+  statement", measured on the gold set (no false contradiction may appear) and on q06.
+- [ ] The 10 runs mix pipeline versions: q01, q04, q07 ran before the disagreement rule, q09
+  before the `meta` label. A full rerun (`make eval-e2e ALL=1`, about 350K tokens, 2 days of
+  quota) would score one version.
 - [ ] Ablations, one table each: global vs. per-document retrieval · `top_k_per_doc` 2/3/4 ·
   2 LLMs. Report accuracy, latency and tokens.
 - [ ] Deduplicate near-identical claims after decomposition (embedding cosine > ~0.92), and

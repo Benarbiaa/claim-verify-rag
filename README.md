@@ -57,22 +57,27 @@ no clean contradiction: `contested` rests on one claim, a general claim tested o
 methods by the two papers.
 
 **Does the whole pipeline work?** A question set proven by quotes, scored from the recorded runs
-([`eval/results/e2e.md`](eval/results/e2e.md)). Smoke test, one question per category:
+([`eval/results/e2e.md`](eval/results/e2e.md)). 10 questions:
 
-| Case | Result |
+| Case | Passed |
 |---|---|
-| Finding from one paper | pass |
-| Two papers, no conflict between them | pass |
-| Real disagreement between two papers | pass: `contested` |
-| False premise in the question ("why does RAG fine-tune its document encoder?") | pass: corrected |
-| Subject the corpus never discusses | pass: no claim verified |
+| Finding from one paper | 2/2 |
+| Several papers, no conflict between them | 2/3 |
+| Real disagreement between two papers | 1/1: `contested` |
+| False premise in the question ("why does RAG fine-tune its document encoder?") | 2/2: corrected |
+| Subject the corpus never discusses | 2/2: no claim verified |
 
-**5/5**, after one fix. The conflict question first failed: the draft said the evidence was
-mixed, but the decomposer split it into claims attributed to one paper each ("Vectara found…",
-"LumberChunker reports…"). Each is true about its own paper, so none could come out `contested`.
-The decomposer now also extracts the disputed statement with no source named ("Semantic chunking
-that uses an LLM improves retrieval"), which the judge marks `contested`. One conflict case
-shows the mechanism works, not how reliably.
+**9/10.** The conflict question first failed: the draft said the evidence was mixed, but the
+decomposer split it into claims attributed to one paper each ("Vectara found…", "LumberChunker
+reports…"). Each is true about its own paper, so none could come out `contested`. The decomposer
+now also extracts the disputed statement with no source named ("Semantic chunking that uses an
+LLM improves retrieval"), which the judge marks `contested`. One conflict case shows the
+mechanism works, not how reliably.
+
+The miss is a false contradiction by the judge: "Poorly chosen chunk boundaries can fragment
+context" came out `contradicted`, because the sources say splitting strips context *in general*.
+A broader statement does not contradict a narrower one. 79 claims in all: 68 supported, 1
+contested, 1 contradicted, 2 unverifiable, 7 set aside as being about the answer itself.
 
 ## How it works
 
