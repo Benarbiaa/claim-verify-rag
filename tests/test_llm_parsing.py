@@ -5,7 +5,7 @@ import json
 import pytest
 from openai import BadRequestError
 
-from claimverify.answering.decomposition import decompose_into_claims
+from claimverify.answering.decomposition import DECOMPOSITION_SYSTEM_PROMPT, decompose_into_claims
 from claimverify.answering.verification import judge_with_llm, read_claims_file, should_continue
 from claimverify.contracts import Claim, Draft, Passage, claims_to_verify
 from fakes import failing_llm, fake_llm, provider_error
@@ -43,6 +43,24 @@ def test_decompose_keeps_the_kind_of_each_claim_and_only_topic_claims_are_verifi
     assert [c.id for c in claims_to_verify(claims)] == ["c1", "c3"]
     with pytest.raises(RuntimeError, match="malformed"):
         decompose_into_claims(fake_llm('{"claims": [{"id": "c1", "claim": "X", "kind": "opinion"}]}'), DRAFT)
+
+
+def test_a_disputed_statement_comes_with_no_source_next_to_the_attributed_claims():
+    payload = {"claims": [
+        {"id": "c1", "claim": "Study A found that coffee improves memory.", "cited_source": "a.pdf", "kind": "topic"},
+        {"id": "c2", "claim": "Study B found that coffee does not improve memory.", "cited_source": "b.pdf", "kind": "topic"},
+        {"id": "c3", "claim": "Coffee improves memory.", "cited_source": None, "kind": "topic"},
+    ]}
+    claims = decompose_into_claims(fake_llm(json.dumps(payload)), DRAFT)
+    assert [c.id for c in claims_to_verify(claims)] == ["c1", "c2", "c3"]
+    assert claims[2].cited_source is None
+
+
+def test_the_prompt_asks_for_the_disputed_statement_without_using_the_evaluation_topic():
+    # the example must not be about chunking: a pass on the conflict question would
+    # otherwise show that the example was copied, not that the rule works
+    assert "WITHOUT naming any source" in DECOMPOSITION_SYSTEM_PROMPT
+    assert "chunk" not in DECOMPOSITION_SYSTEM_PROMPT.split("5. Disagreements")[1].split("6. ")[0].lower()
 
 
 def test_decompose_rejects_a_malformed_claim_at_the_boundary():

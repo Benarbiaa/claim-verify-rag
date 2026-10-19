@@ -63,14 +63,16 @@ methods by the two papers.
 |---|---|
 | Finding from one paper | pass |
 | Two papers, no conflict between them | pass |
-| Real disagreement between two papers | **fail** |
+| Real disagreement between two papers | pass: `contested` |
 | False premise in the question ("why does RAG fine-tune its document encoder?") | pass: corrected |
 | Subject the corpus never discusses | pass: no claim verified |
 
-**4/5.** The miss shows a limit of the design: the draft says the evidence is mixed, but the
-decomposer splits it into claims attributed to one paper each ("Vectara found…", "LumberChunker
-reports…"). Each is true about its own paper, so no claim carries both sides and none comes out
-`contested`.
+**5/5**, after one fix. The conflict question first failed: the draft said the evidence was
+mixed, but the decomposer split it into claims attributed to one paper each ("Vectara found…",
+"LumberChunker reports…"). Each is true about its own paper, so none could come out `contested`.
+The decomposer now also extracts the disputed statement with no source named ("Semantic chunking
+that uses an LLM improves retrieval"), which the judge marks `contested`. One conflict case
+shows the mechanism works, not how reliably.
 
 ## How it works
 

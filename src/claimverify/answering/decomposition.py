@@ -9,6 +9,10 @@ No retrieval here: it is a pure text transformation, through a second LLM
 call dedicated to this single task (separate from drafting, so each step can
 be tested on its own).
 
+When the draft reports that sources disagree, the disputed statement is also
+extracted with no source named: "Study A found X" is true by construction, only
+"X" can be supported by one source and contradicted by another (contested).
+
 Each claim is labelled "topic" (about the subject, verified next) or "meta"
 (about the answer or its passages, kept in the run but not verified): the LLM
 decides, the code only acts on the label, so the decision stays visible.
@@ -77,10 +81,22 @@ Strict rules:
      are "meta".
    Extract both kinds; when unsure, use "topic". A text that only says its sources do not cover
    the question has no "topic" claim. If the text asserts nothing at all, return an empty list.
-5. If the source text cites a source in brackets (e.g. [filename.pdf | chunk #N]) for a claim,
+5. Disagreements: if the text says that sources disagree, that the evidence is mixed, or that
+   one source reports the opposite of another ON THE SAME QUESTION, also extract the disputed
+   statement itself, as a "topic" claim, WITHOUT naming any source: the statement that one side
+   supports and the other rejects. Keep the attributed claims too ("Study A found ...", "Study B
+   reports ..."). A sentence that only announces the disagreement ("The evidence is mixed.",
+   "The sources disagree.") is replaced by the disputed statement, not extracted on its own.
+   Do this only when the text itself presents the sources as opposed. Sources that study
+   different things, or that add to each other, do not disagree.
+   Example: "Study A found that coffee improves memory; study B reports the opposite." gives
+   "Study A found that coffee improves memory.", "Study B found that coffee does not improve
+   memory." and "Coffee improves memory." (no source named, cited_source null).
+6. If the source text cites a source in brackets (e.g. [filename.pdf | chunk #N]) for a claim,
    carry that citation into the claim's "cited_source" field. If several claims come from the same
    source sentence, they all inherit the same citation.
-6. If a claim has no explicit citation in the text, set "cited_source" to null.
+7. If a claim has no explicit citation in the text (including a disputed statement from rule 5),
+   set "cited_source" to null.
 
 Respond ONLY with a valid JSON object, no text before or after, in this format:
 

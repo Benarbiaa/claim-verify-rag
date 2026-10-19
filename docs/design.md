@@ -637,6 +637,7 @@ gave identical results.
 |---|---|---|---|
 | Q3 | a claim approved with the wrong support | judge / retrieval | better chunks and retrieval, then the judge prompt |
 | Q4 | claims about the answer or its passages ("the provided passages do not mention X") | decomposer | the decomposer labels each claim `topic` or `meta`; only `topic` claims are verified, `meta` ones are kept in the run and shown as set aside. Measured on the 5 recorded smoke-test drafts: q09's 3 sentences labelled `meta`, no claim about the topic set aside |
+| Q6 | a disagreement reported by the draft is split into claims attributed to one source each, all true: no `contested` possible | decomposer | the decomposer also extracts the disputed statement with no source named; measured on q05 (`contested`, LumberChunker against Vectara) and on 5 drafts without conflict (no disputed claim added) |
 | - | reference lists are indexed like the rest of the text | cleaner | kept on purpose (minimal cleaning); measure whether reference chunks are retrieved |
 
 (Fixed: Q1, `SOURCES.md` ingested as evidence, moved to `data/info/`; Q2, a citation with an old

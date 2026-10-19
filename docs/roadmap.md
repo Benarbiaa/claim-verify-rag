@@ -115,14 +115,22 @@ them before building the eval baseline**, or the numbers you report will be skew
   false-contradiction rate.
 - [x] End-to-end evaluation (`make eval-e2e`): `eval/questions.jsonl`, 10 questions proven by
   quotes, scored from the recorded runs (`e2e_eval.py`). Smoke test (5 questions, one per
-  category): **4/5**, 162K tokens. The miss, q05 (conflict): the draft says the evidence is
-  mixed, but the decomposer splits it into claims attributed to one paper each ("Vectara
-  found…", "LumberChunker reports…"), each rightly `supported`: no claim carries both sides, so
-  no `contested`. Results: `eval/results/e2e.md`.
-- [ ] **Conflicts dissolve in decomposition.** Attributed claims are true about their own paper,
-  so the more faithful the decomposer, the less `contested` can fire. Candidate fixes: also
-  extract the unattributed claim under a disagreement ("LLM-based chunking consistently
-  improves retrieval"), or let the verifier compare claims on the same subject.
+  category): first 4/5, then **5/5** after the fix below. Results: `eval/results/e2e.md`.
+- [x] **Conflicts dissolved in decomposition.** q05's draft said the evidence was mixed, but the
+  decomposer split it into claims attributed to one paper each ("Vectara found…",
+  "LumberChunker reports…"): each true about its own paper, so none could be `contested`.
+  *Fix:* when the draft presents sources as opposed, the decomposer also extracts the disputed
+  statement with no source named (prompt rule 5, its example about coffee so the prompt does
+  not hold the test's answer). *Measured:* rerun of the decomposer alone on the 6 recorded
+  drafts (13K tokens): q05 gains the disputed claim, the 5 others none (q06, two papers that
+  differ without opposing, included); the judge marks it `contested` (LumberChunker for,
+  Vectara against); q05 end to end then passes. A single conflict case: the mechanism works,
+  its reliability is not measured.
+- [ ] Comparing claims with each other in the verifier (pairs on the same subject), for
+  conflicts the draft does not announce. Fits the agentic verifier.
+- [ ] A false detail can come out `unverifiable` instead of `contradicted`: "Vectara's
+  evaluation includes LLM-driven splitting" (it tests embedding-based chunkers only) was judged
+  unverifiable, since no passage says what was *not* tested.
 - [ ] Run the 5 other questions (`make eval-e2e ALL=1 RESUME=1`, about 200K tokens).
 - [ ] Ablations, one table each: global vs. per-document retrieval · `top_k_per_doc` 2/3/4 ·
   2 LLMs. Report accuracy, latency and tokens.
